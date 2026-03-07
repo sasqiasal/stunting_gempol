@@ -1,0 +1,265 @@
+/**
+ * Mobile-First Responsive Styles
+ * Optimasi untuk semua jenis HP
+ */
+
+/* === GLOBAL MOBILE OPTIMIZATIONS === */
+
+/* Prevent text size adjustment on orientation change */
+html {
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Better touch target size (minimum 44x44px recommended by Apple) */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Prevent zoom on input focus (iOS Safari) */
+@media screen and (max-width: 767px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  input[type="date"],
+  textarea,
+  select {
+    font-size: 16px !important; /* Prevents iOS zoom */
+  }
+}
+
+/* === TOUCH OPTIMIZATIONS === */
+
+/* Better tap highlighting */
+* {
+  -webkit-tap-highlight-color: rgba(59, 130, 246, 0.1);
+}
+
+/* Remove iOS default styles */
+input[type="submit"],
+input[type="button"],
+button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Prevent overscroll bounce (iOS) */
+body {
+  overscroll-behavior-y: none;
+}
+
+/* === MAP OPTIMIZATIONS (LEAFLET) === */
+
+/* Make map touch-friendly on mobile */
+.leaflet-container {
+  font-size: 12px !important;
+  touch-action: pan-x pan-y;
+}
+
+.leaflet-popup-content {
+  font-size: 13px !important;
+  line-height: 1.4;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+}
+
+/* Larger touch targets for map controls */
+@media screen and (max-width: 640px) {
+  .leaflet-control-zoom a {
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 20px !important;
+  }
+
+  .leaflet-popup {
+    margin-bottom: 30px !important;
+  }
+}
+
+/* === FORM OPTIMIZATIONS === */
+
+/* Better select dropdown on mobile */
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* === TABLE RESPONSIVE OPTIMIZATIONS === */
+
+/* Horizontal scroll for tables on mobile */
+@media screen and (max-width: 640px) {
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    min-width: 600px;
+  }
+}
+
+/* === LOADING STATES === */
+
+/* Pulse animation for loading */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.loading-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* === SAFE AREAS (iPhone X+) === */
+
+/* Add padding for notch and home indicator */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  header {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  footer {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* === LANDSCAPE MODE === */
+
+@media screen and (max-height: 500px) and (orientation: landscape) {
+  /* Reduce vertical spacing in landscape */
+  .space-y-4 > * + * {
+    margin-top: 0.5rem !important;
+  }
+
+  .py-8 {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+}
+
+/* === DARK MODE SUPPORT (Optional) === */
+
+@media (prefers-color-scheme: dark) {
+  /* Add dark mode styles if needed in future */
+}
+
+/* === ACCESSIBILITY === */
+
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* === CUSTOM SCROLLBAR (WEBKIT) === */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* === PRINT STYLES === */
+
+@media print {
+  /* Hide non-essential elements when printing */
+  header nav,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Ensure proper page breaks */
+  .page-break {
+    page-break-after: always;
+  }
+}
+
+/* === UTILITY CLASSES === */
+
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+.user-select-none {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.break-words {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Safe area spacing */
+.safe-left {
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+.safe-right {
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.safe-top {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}

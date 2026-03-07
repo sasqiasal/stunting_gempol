@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logogempol.png" />
+
+    <!-- Mobile-First Meta Tags -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#3b82f6" />
+    
+    <!-- SEO Meta Tags -->
+    <title>Sistem Deteksi Dini Stunting - Desa Gempol</title>
+    <meta name="description" content="Sistem Deteksi Dini Stunting dengan Machine Learning untuk Desa Gempol. Responsive untuk semua perangkat mobile." />
+    <meta name="keywords" content="stunting, deteksi dini, machine learning, kesehatan balita, desa gempol" />
+    <meta name="author" content="Desa Gempol" />
+    
+    <!-- Open Graph / Social Media -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Sistem Deteksi Dini Stunting - Desa Gempol" />
+    <meta property="og:description" content="Sistem Deteksi Dini Stunting dengan Machine Learning" />
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""/>
+    
+    <!-- Prevent iOS zoom on input focus -->
+    <style>
+      @media screen and (max-width: 767px) {
+        input, select, textarea {
+          font-size: 16px !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
