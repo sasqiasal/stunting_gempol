@@ -17,6 +17,79 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
   const [balitaList, setBalitaList] = useState([]);
   const [selectedBalita, setSelectedBalita] = useState(null);
   const [selectedBalitaOption, setSelectedBalitaOption] = useState(null);
+  const [calculatedAge, setCalculatedAge] = useState(null);
+
+  // 4-class classification labels
+  const getClassificationLabel = (classNum) => {
+    // Handle berbagai tipe input
+    const num = Number(classNum);
+    const classMap = {
+      0: "Normal + Gizi Baik",
+      1: "Normal + Kurang Gizi",
+      2: "Stunting + Gizi Baik",
+      3: "Stunting + Kurang Gizi"
+    };
+    
+    // Debug: log jika ada nilai yang tidak dikenal
+    if (!(num in classMap)) {
+      console.warn(`Unknown classification value: ${classNum} (type: ${typeof classNum})`);
+    }
+    
+    return classMap[num] || `Unknown Class ${classNum}`;
+  };
+
+  // Helper: Calculate age in months from birthdate to measurement month
+  const calculateAgeAtMeasurement = (birthDate, selectedMonth) => {
+    if (!birthDate || !selectedMonth) return null;
+    
+    const birth = new Date(birthDate);
+    const [year, month] = selectedMonth.split('-').map(Number);
+    
+    // Create measurement date as last day of selected month
+    const lastDay = new Date(year, month, 0).getDate();
+    const measurement = new Date(year, month - 1, lastDay);
+    
+    // Calculate total months between two dates
+    const yearsDiff = measurement.getFullYear() - birth.getFullYear();
+    const monthsDiff = measurement.getMonth() - birth.getMonth();
+    let totalMonths = yearsDiff * 12 + monthsDiff;
+    
+    // Adjust if measurement day is before birth day
+    if (measurement.getDate() < birth.getDate()) {
+      totalMonths--;
+    }
+    
+    return Math.max(0, totalMonths);
+  };
+
+  // Helper: Get allowed months (current month + 3 months back)
+  const getAllowedMonths = () => {
+    const months = [];
+    const today = new Date();
+    
+    for (let i = 3; i >= 0; i--) {
+      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const monthYear = `${year}-${month}`;
+      
+      const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", 
+                          "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+      const label = `${monthNames[date.getMonth()]} ${year}`;
+      
+      months.push({ value: monthYear, label });
+    }
+    
+    return months;
+  };
+
+  // Default bulan pengukuran = bulan ini (format YYYY-MM)
+  const todayMonth = (() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  })();
 
   const {
     register,
@@ -29,6 +102,7 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
   } = useForm({
     defaultValues: {
       balita_id: balitaId || "",
+      bulan_pengukuran: todayMonth,
       tinggi_badan: "",
       berat_badan: "",
       lingkar_lengan: "",
@@ -38,6 +112,7 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
   });
 
   const watchBalitaId = watch("balita_id");
+  const watchBulanPengukuran = watch("bulan_pengukuran");
 
   useEffect(() => {
     loadBalita();
@@ -52,12 +127,16 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
           value: balita.id,
           label: `${censorChildName(balita.nama_lengkap)} - ${balita.nik}`,
         });
+        // Hitung usia saat bulan pengukuran
+        const ageAtMonth = calculateAgeAtMeasurement(balita.tanggal_lahir, watchBulanPengukuran);
+        setCalculatedAge(ageAtMonth);
       }
     } else {
       setSelectedBalita(null);
       setSelectedBalitaOption(null);
+      setCalculatedAge(null);
     }
-  }, [watchBalitaId, balitaList]);
+  }, [watchBalitaId, watchBulanPengukuran, balitaList]);
 
   const loadBalita = async () => {
     try {
@@ -73,9 +152,31 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
     try {
       setLoading(true);
 
+      // Convert bulan_pengukuran (YYYY-MM) to tanggal_pengukuran (YYYY-MM-DD)
+      // Logic: 
+      // - Jika bulan dipilih adalah bulan sekarang → gunakan tanggal hari ini
+      // - Jika bulan dipilih adalah bulan sebelumnya/lewat → gunakan tanggal 1 bulan itu
+      const [year, month] = data.bulan_pengukuran.split('-').map(Number);
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth() + 1;
+      
+      let tanggalPengukuran;
+      
+      if (year === currentYear && month === currentMonth) {
+        // Bulan sekarang → gunakan tanggal hari ini
+        const day = String(today.getDate()).padStart(2, '0');
+        tanggalPengukuran = `${year}-${String(month).padStart(2, '0')}-${day}`;
+      } else {
+        // Bulan lalu atau lewat → gunakan tanggal 1
+        tanggalPengukuran = `${year}-${String(month).padStart(2, '0')}-01`;
+      }
+
       // Convert strings to numbers
       const payload = {
         balita_id: parseInt(data.balita_id),
+        tanggal_pengukuran: tanggalPengukuran,
+        usia_bulan: calculatedAge, // Usia saat diukur (bukan usia balita saat ini)
         tinggi_badan: parseFloat(data.tinggi_badan),
         berat_badan: parseFloat(data.berat_badan),
         lingkar_lengan: parseFloat(data.lingkar_lengan),
@@ -89,11 +190,14 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
 
       const result = await pengukuranService.create(payload);
 
-      toast.success(`Pengukuran berhasil disimpan!\nPrediksi: ${result.prediksi_stunting ? "STUNTING" : "NORMAL"} (${(result.confidence_score * 100).toFixed(1)}%)`);
+      // Display 4-class classification in toast
+      const classLabel = getClassificationLabel(result.prediksi_stunting);
+      toast.success(`Pengukuran berhasil disimpan!\nKlasifikasi: ${classLabel} (${(result.confidence_score * 100).toFixed(1)}%)`);
 
       reset();
       setSelectedBalita(null);
       setSelectedBalitaOption(null);
+      setCalculatedAge(null);
 
       if (onSuccess) {
         onSuccess(result);
@@ -108,7 +212,27 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
 
   return (
     <div className="bg-white rounded-lg shadow p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
-      <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">✏️ Input Data Pengukuran</h2>
+      {/* Header dengan Title + Bulan Pengukuran di pojok kanan */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-4 border-b border-gray-200">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Input Data Pengukuran</h2>
+        
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full sm:w-auto">
+          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Bulan Pengukuran:</label>
+          <select
+            {...register("bulan_pengukuran", { required: "Bulan pengukuran harus dipilih" })}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-auto"
+          >
+            {getAllowedMonths().map((month) => (
+              <option key={month.value} value={month.value}>
+                {month.label}
+              </option>
+            ))}
+          </select>
+          {errors.bulan_pengukuran && (
+            <p className="text-xs text-red-600 col-span-full sm:col-span-1">{errors.bulan_pengukuran.message}</p>
+          )}
+        </div>
+      </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {/* Info Balita - Moved to Top */}
@@ -121,8 +245,8 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
                 <span className="ml-2 font-medium">{selectedBalita.jenis_kelamin === "L" ? "Laki-laki" : "Perempuan"}</span>
               </div>
               <div className="flex items-center">
-                <span className="text-gray-600">Usia:</span>
-                <span className="ml-2 font-medium">{selectedBalita.usia_bulan} bulan</span>
+                <span className="text-gray-600">Usia saat pengukuran:</span>
+                <span className="ml-2 font-medium text-blue-700">{calculatedAge !== null ? `${calculatedAge} bulan` : 'Pilih bulan'}</span>
               </div>
             </div>
           </div>

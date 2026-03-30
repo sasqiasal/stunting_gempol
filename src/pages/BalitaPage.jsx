@@ -403,6 +403,7 @@ const BalitaPage = () => {
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">No</th>
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Balita</th>
+                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usia</th>
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">TB (cm)</th>
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">BB (kg)</th>
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">LL (cm)</th>
@@ -410,20 +411,18 @@ const BalitaPage = () => {
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Z-Score BB/U</th>
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Z-Score TB/U</th>
                         <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status Gizi</th>
-                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prediksi</th>
-                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Confidence</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {loadingPengukuran ? (
                         <tr>
-                          <td colSpan="12" className="px-6 py-4 text-center text-gray-500 text-sm">
+                          <td colSpan="11" className="px-6 py-4 text-center text-gray-500 text-sm">
                             Loading...
                           </td>
                         </tr>
                       ) : filteredPengukuran.length === 0 ? (
                         <tr>
-                          <td colSpan="12" className="px-6 py-4 text-center text-gray-500 text-sm">
+                          <td colSpan="11" className="px-6 py-4 text-center text-gray-500 text-sm">
                             Tidak ada data pengukuran
                           </td>
                         </tr>
@@ -458,6 +457,7 @@ const BalitaPage = () => {
                                 </button>
                               </div>
                             </td>
+                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">{pengukuran.usia_bulan} bulan</td>
                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">{pengukuran.tinggi_badan}</td>
                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">{pengukuran.berat_badan}</td>
                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">{pengukuran.lingkar_lengan || "-"}</td>
@@ -479,16 +479,6 @@ const BalitaPage = () => {
                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs">
                               {pengukuran.status_gizi ? <span className={getStatusBadge(pengukuran.status_gizi)}>{pengukuran.status_gizi}</span> : <span className="text-gray-400">-</span>}
                             </td>
-                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs">
-                              {pengukuran.prediksi_stunting != null ? (
-                                <span className={getStatusBadge(pengukuran.prediksi_stunting === true || pengukuran.prediksi_stunting === "Stunting" ? "STUNTING" : "NORMAL")}>
-                                  {pengukuran.prediksi_stunting === true || pengukuran.prediksi_stunting === "Stunting" ? "Iya" : "Tidak"}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">{pengukuran.confidence_score ? `${(pengukuran.confidence_score * 100).toFixed(1)}%` : "-"}</td>
                           </tr>
                         ))
                       )}

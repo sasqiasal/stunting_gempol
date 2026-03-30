@@ -48,7 +48,7 @@ const StuntingHistoryChart = ({ data, isLoading, error, userRole }) => {
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-          📊 Grafik Riwayat Stunting
+           Grafik Riwayat Stunting
           <span className="text-sm font-normal text-gray-500">
             ({userRole === 'admin' ? 'Semua Posyandu' : 'Posyandu Saya'})
           </span>
@@ -86,10 +86,10 @@ const StuntingHistoryChart = ({ data, isLoading, error, userRole }) => {
       <div className="mb-4 sm:mb-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
-            📊 Grafik Riwayat Stunting
+             Grafik Riwayat Stunting
           </h2>
           <span className="text-xs sm:text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-            {userRole === 'admin' ? '🌐 Semua Posyandu' : '📍 Posyandu Saya'}
+            {userRole === 'admin' ? 'Semua Posyandu' : 'Posyandu Saya'}
           </span>
         </div>
         <p className="text-xs sm:text-sm text-gray-600">

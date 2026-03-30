@@ -58,8 +58,20 @@ async def startup_event():
     print("=" * 60)
     
     # Load model KNN jika file model sudah ada
-    model_path = "app/ml/models/knn_stunting_model.pkl"
-    if os.path.exists(model_path):
+    # Check multiple possible paths
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        "app/ml/models/knn_stunting_model.pkl",  # When run from stunting_gempol dir
+        os.path.join(backend_dir, "app/ml/models/knn_stunting_model.pkl"),  # When run from backend dir
+    ]
+    
+    model_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            model_path = path
+            break
+    
+    if model_path:
         try:
             knn_model.load_model(model_path)
             print(f"✅ Model KNN berhasil dimuat dari {model_path}")
@@ -67,7 +79,7 @@ async def startup_event():
             print(f"⚠️  Gagal memuat model: {e}")
             print("💡 Model akan menggunakan Z-Score saja untuk prediksi")
     else:
-        print(f"⚠️  Model belum tersedia di {model_path}")
+        print(f"⚠️  Model belum tersedia")
         print("💡 Jalankan script train_model.py untuk melatih model")
         print("💡 Sementara, prediksi akan menggunakan Z-Score saja")
     

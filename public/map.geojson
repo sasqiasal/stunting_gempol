@@ -9,7 +9,7 @@
         "stroke-opacity": 1,
         "fill": "#ffa200",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Anggrek 1"
+        "nama_posyandu": "Matahari 1"
       },
       "geometry": {
         "coordinates": [
@@ -88,7 +88,7 @@
         "stroke-opacity": 1,
         "fill": "#ff0000",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Anggrek 2"
+        "nama_posyandu": "Matahari 2"
       },
       "geometry": {
         "coordinates": [
@@ -266,7 +266,7 @@
         "stroke-opacity": 1,
         "fill": "#006644",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Tanjung"
+        "nama_posyandu": "Durian 2"
       },
       "geometry": {
         "coordinates": [
@@ -388,7 +388,7 @@
         "stroke-opacity": 1,
         "fill": "#555555",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Durian 1"
+        "nama_posyandu": "Anggrek 2"
       },
       "geometry": {
         "coordinates": [
@@ -483,7 +483,7 @@
         "stroke-opacity": 1,
         "fill": "#00ff33",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Durian 2"
+        "nama_posyandu": "Anggrek 1"
       },
       "geometry": {
         "coordinates": [
@@ -646,7 +646,7 @@
         "stroke-opacity": 1,
         "fill": "#ffffff",
         "fill-opacity": 1,
-        "nama_posyandu": "Kamboja"
+        "nama_posyandu": "Durian 1"
       },
       "geometry": {
         "coordinates": [
@@ -794,7 +794,7 @@
         "stroke-opacity": 1,
         "fill": "#001eff",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Sakura"
+        "nama_posyandu": "Dahlia"
       },
       "geometry": {
         "coordinates": [
@@ -864,7 +864,7 @@
         "stroke-opacity": 1,
         "fill": "#ff8800",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Matahari 1"
+        "nama_posyandu": "Melati"
       },
       "geometry": {
         "coordinates": [
@@ -986,7 +986,7 @@
         "stroke-opacity": 1,
         "fill": "#00fbff",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Matahari 2"
+        "nama_posyandu": "Ceria"
       },
       "geometry": {
         "coordinates": [
@@ -1140,7 +1140,7 @@
         "stroke-opacity": 1,
         "fill": "#770080",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Ceria"
+        "nama_posyandu": "Tanjung"
       },
       "geometry": {
         "coordinates": [
@@ -1258,7 +1258,7 @@
         "stroke-opacity": 1,
         "fill": "#ffd500",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Melati"
+        "nama_posyandu": "Kamboja"
       },
       "geometry": {
         "coordinates": [
@@ -1352,7 +1352,7 @@
         "stroke-opacity": 1,
         "fill": "#ff00ea",
         "fill-opacity": 0.5,
-        "nama_posyandu": "Dahlia"
+        "nama_posyandu": "Sakura"
       },
       "geometry": {
         "coordinates": [

@@ -1,6 +1,12 @@
 """
 Service untuk Prediksi Stunting
-Menggabungkan kalkulasi Z-Score dengan prediksi model KNN
+Menggabungkan kalkulasi Z-Score dengan prediksi model KNN (4 Kelas)
+
+Label Klasifikasi (4 Kelas):
+- 0: Normal + Gizi Baik
+- 1: Normal + Kurang Gizi
+- 2: Stunting + Gizi Baik
+- 3: Stunting + Kurang Gizi
 """
 
 from typing import Dict, Literal
@@ -13,9 +19,17 @@ from app.utils.zscore_calculator import (
 )
 from app.ml.knn_model import get_knn_model
 
+# Mapping label integer ke deskripsi 4 kelas
+CLASSIFICATION_MAPPING = {
+    0: "Normal + Gizi Baik",
+    1: "Normal + Kurang Gizi",
+    2: "Stunting + Gizi Baik",
+    3: "Stunting + Kurang Gizi"
+}
+
 class PredictionService:
     """
-    Service untuk melakukan prediksi stunting
+    Service untuk melakukan prediksi stunting dengan 4 kelas klasifikasi
     """
     
     @staticmethod
@@ -28,7 +42,7 @@ class PredictionService:
         lingkar_kepala: float
     ) -> Dict:
         """
-        Melakukan prediksi stunting lengkap dengan Z-Score dan model KNN
+        Melakukan prediksi stunting lengkap dengan Z-Score dan model KNN (4 kelas)
         
         Args:
             jenis_kelamin: L untuk laki-laki, P untuk perempuan
@@ -42,8 +56,8 @@ class PredictionService:
             Dictionary berisi:
             - zscore_bbu: Z-Score Berat Badan/Usia
             - zscore_tbu: Z-Score Tinggi Badan/Usia
-            - status_gizi: Status gizi berdasarkan Z-Score
-            - prediksi_stunting: Boolean hasil prediksi model
+            - status_gizi: Status gizi 4 kelas (Normal+Baik, Normal+Kurang, Stunting+Baik, Stunting+Kurang)
+            - status_gizi_label: Label integer (0, 1, 2, 3)
             - confidence_score: Confidence score dari model
             - is_stunting_zscore: Boolean stunting berdasarkan Z-Score saja
         """
@@ -57,8 +71,12 @@ class PredictionService:
         # 3. Cek stunting berdasarkan Z-Score saja
         is_stunting_zscore = is_stunting(zscore_tbu)
         
-        # 4. Prediksi menggunakan model KNN (PRIMARY - dari 500 data training)
+        # 4. Prediksi menggunakan model KNN (PRIMARY - 4 kelas dari 500 data training)
         nearest_neighbors = []
+        status_gizi = "Normal + Gizi Baik"  # default
+        status_gizi_label = 0  # default
+        confidence_score = 0.0
+        
         try:
             model = get_knn_model()
             
@@ -74,60 +92,50 @@ class PredictionService:
                 zscore_tbu=zscore_tbu
             )
             
-            # Prediksi (model mengembalikan 0, 1, 3, atau 4 dari 500 data training)
+            # ========================================
+            # STEP 1: PREDIKSI MENGGUNAKAN K=5
+            # (Model KNN internal menggunakan k=5 untuk klasifikasi)
+            # ========================================
             prediction, confidence = model.predict(features)
             confidence_score = confidence
+            status_gizi_label = int(prediction)
+            
+            # Map label integer ke deskripsi 4 kelas
+            status_gizi = CLASSIFICATION_MAPPING.get(status_gizi_label, "Unknown")
 
-            # Cari tetangga terdekat (Interpretability)
-            nearest_neighbors = model.find_nearest_neighbors(features, n_neighbors=5)
+            # ========================================
+            # STEP 2: CARI 10 TETANGGA UNTUK DISPLAY
+            # (Disimpan di database untuk fleksibilitas UI)
+            # ========================================
+            nearest_neighbors = model.find_nearest_neighbors(features, n_neighbors=10)
             
             # DEBUG: Log prediction details
-            print(f" PREDICTION DEBUG:")
+            print(f"[DEBUG] PREDICTION:")
             print(f"   Input: JK={jenis_kelamin}, Usia={usia_bulan}bln, TB={tinggi_badan}cm, BB={berat_badan}kg")
             print(f"   Z-Scores: BB/U={zscore_bbu:.2f}, TB/U={zscore_tbu:.2f}")
-            print(f"   Model Prediction (dari 500 data): {prediction}")
+            print(f"   Model Prediction (4 kelas, K=5): Label {prediction} = {status_gizi}")
             print(f"   Confidence: {confidence_score:.2%}")
             
             if nearest_neighbors:
-                print(f"   Nearest Neighbors (k=5):")
+                print(f"   Nearest Neighbors untuk display (k={len(nearest_neighbors)}):")
                 for i, n in enumerate(nearest_neighbors):
                     print(f"     {i+1}. Dist: {n['distance']:.4f} - {n['label']} (Usia: {n['usia_bulan']} bln, TB: {n['tinggi_badan']} cm, BB: {n['berat_badan']} kg)")
             
-            # Mapping dari 4 kelas ke Status Gizi (BERDASAR DATA LATIH):
-            # 0 = Normal + Gizi Baik
-            # 1 = Normal + Kurang Gizi
-            # 3 = Stunting + Gizi Baik
-            # 4 = Stunting + Kurang Gizi
-            
-            # Prediksi Stunting: 3 atau 4 = Stunting
-            prediksi_stunting = bool(prediction in [3, 4])
-            
-            # Status Gizi dari model (4 kategori dari data training)
-            if prediction == 0:
-                status_gizi = "Normal + Gizi Baik"
-            elif prediction == 1:
-                status_gizi = "Normal + Kurang Gizi"
-            elif prediction == 3:
-                status_gizi = "Stunting + Gizi Baik"
-            else:  # prediction == 4
-                status_gizi = "Stunting + Kurang Gizi"
-            
-            print(f"   ✅ Status Gizi (dari model): {status_gizi}")
+            print(f"   [OK] Status Gizi (4 Kelas, K=5): {status_gizi}")
             
         except Exception as e:
             # Jika model belum dilatih, gunakan Z-Score saja
-            print(f"⚠️ Model prediction failed: {e}. Using Z-Score fallback.")
-            prediksi_stunting = is_stunting_zscore
-            confidence_score = 1.0 if is_stunting_zscore else 0.9
+            print(f"[WARNING] Model prediction failed: {e}. Using Z-Score fallback.")
             status_gizi = status_gizi_zscore
-            # status_gizi sudah di-set dari determine_nutrition_status()
+            status_gizi_label = 0 if not is_stunting_zscore else 2  # Assume good nutrition if fallback
+            confidence_score = 0.0
         
         # 5. Return hasil - Convert semua ke native Python types untuk JSON serialization
         return {
             "zscore_bbu": float(zscore_bbu),
             "zscore_tbu": float(zscore_tbu),
             "status_gizi": str(status_gizi),
-            "prediksi_stunting": bool(prediksi_stunting),
+            "status_gizi_label": int(status_gizi_label),
             "confidence_score": float(confidence_score),
             "is_stunting_zscore": bool(is_stunting_zscore),
             "tanggal_prediksi": datetime.now(),

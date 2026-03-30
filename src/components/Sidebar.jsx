@@ -51,7 +51,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         </svg>
       ),
       path: '/evaluasi-model',
-      roles: ['kader'] // Admin tidak bisa evaluasi model
+      roles: ['kader'] // Kader: Evaluasi per-kader
     },
     {
       name: 'Akun',
@@ -73,6 +73,16 @@ const Sidebar = ({ isOpen, onClose }) => {
       ),
       path: '/posyandu',
       roles: ['admin']
+    },
+    {
+      name: 'Evaluasi Global',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      ),
+      path: '/evaluasi-global',
+      roles: ['admin'] // Admin: Evaluasi global semua data
     }
   ];
 
@@ -114,7 +124,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         <div className="p-4 border-b">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold">
+              <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold">
                 {user?.nama_lengkap?.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
@@ -152,7 +162,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                     w-full flex items-center space-x-3 px-4 py-3 rounded-lg
                     text-left transition-colors duration-150
                     ${isActive 
-                      ? 'bg-primary-600 text-white' 
+                      ? 'bg-green-600 text-white' 
                       : 'text-gray-700 hover:bg-gray-100'
                     }
                   `}

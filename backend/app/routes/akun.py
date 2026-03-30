@@ -437,3 +437,62 @@ async def get_account_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error mengambil statistik: {str(e)}"
         )
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: int):
+    """Delete user account. (Admin Only)"""
+    try:
+        supabase = get_supabase()
+        
+        # Check if user exists
+        user = supabase.table('users').select('*').eq('id', user_id).execute()
+        if not user.data:
+            raise HTTPException(status_code=404, detail="User tidak ditemukan")
+
+        # Delete user
+        supabase.table('users').delete().eq('id', user_id).execute()
+
+        return {"success": True, "message": "User berhasil dihapus"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/users/{user_id}")
+async def update_user_admin(user_id: int, user_data: dict):
+    """Update user account. (Admin Only)"""
+    try:
+        supabase = get_supabase()
+        
+        # Check if user exists
+        user = supabase.table('users').select('*').eq('id', user_id).execute()
+        if not user.data:
+            raise HTTPException(status_code=404, detail="User tidak ditemukan")
+
+        update_data = {
+            'nama_lengkap': user_data.get('nama_lengkap'),
+            'role': user_data.get('role'),
+            'email': user_data.get('email')
+        }
+        if update_data['role'] == 'kader':
+            update_data['posyandu_id'] = user_data.get('posyandu_id')
+        else:
+            update_data['posyandu_id'] = None
+
+        # Update user
+        result = supabase.table('users').update(update_data).eq('id', user_id).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=400, detail="Gagal mengupdate user")
+
+        return {"success": True, "message": "User berhasil diupdate", "data": result.data[0]}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
