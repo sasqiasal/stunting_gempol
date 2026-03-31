@@ -262,7 +262,7 @@ export const exportPengukuranToExcel = async (data, posyanduList = [], user = nu
       worksheet.columns = [
         { header: 'No', key: 'no', width: 5 },
         { header: 'Tanggal', key: 'tanggal', width: 12 },
-        { header: 'Nama Balita', key: 'nama', width: 25 },
+        { header: 'Nama Balita', key: 'nama', width: 50 },
         { header: 'NIK', key: 'nik', width: 18 },
         { header: 'Tanggal Lahir', key: 'tgl_lahir', width: 15 },
         { header: 'Jenis Kelamin', key: 'jk', width: 15 },
@@ -270,7 +270,7 @@ export const exportPengukuranToExcel = async (data, posyanduList = [], user = nu
         { header: 'TB (cm)', key: 'tb', width: 10 },
         { header: 'BB (kg)', key: 'bb', width: 10 },
         { header: 'Lingkar Lengan (cm)', key: 'll', width: 18 },
-        { header: 'Lingkar Kepala (cm)', key: 'lk', width: 18 },
+        { header: 'Lingkar Kepala (cm)', key: 'lk', width: 50 },
         { header: 'Z-Score BB/U', key: 'zbb', width: 14 },
         { header: 'Z-Score TB/U', key: 'ztb', width: 14 },
         { header: 'Status Gizi', key: 'status', width: 20 },
@@ -373,7 +373,7 @@ export const exportBalitaToExcel = async (data, filename = 'Data_Balita') => {
 
   worksheet.columns = [
     { header: 'No', key: 'no', width: 5 },
-    { header: 'Nama Lengkap', key: 'nama', width: 25 },
+    { header: 'Nama Lengkap', key: 'nama', width: 50 },
     { header: 'NIK', key: 'nik', width: 18 },
     { header: 'Jenis Kelamin', key: 'jk', width: 15 },
     { header: 'Tanggal Lahir', key: 'tgl_lahir', width: 12 },
@@ -625,13 +625,13 @@ const createDetailSheet = (workbook, data, sheetName) => {
   sheet.columns = [
     { header: 'No', key: 'no', width: 5 },
     { header: 'Tanggal', key: 'tanggal', width: 12 },
-    { header: 'Nama', key: 'nama', width: 25 },
+    { header: 'Nama', key: 'nama', width: 50 },
     { header: 'Jenis Kelamin', key: 'jk', width: 15 },
     { header: 'Usia (bulan)', key: 'usia', width: 12 },
     { header: 'Tinggi (cm)', key: 'tinggi', width: 12 },
     { header: 'Berat (kg)', key: 'berat', width: 12 },
     { header: 'Lingkar Lengan (cm)', key: 'll', width: 18 },
-    { header: 'Lingkar Kepala (cm)', key: 'lk', width: 18 },
+    { header: 'Lingkar Kepala (cm)', key: 'lk', width: 50 },
     { header: 'Z-Score BB/U', key: 'zbb', width: 14 },
     { header: 'Z-Score TB/U', key: 'ztb', width: 14 },
     { header: 'Status Gizi Aktual', key: 'status_aktual', width: 25 },
@@ -829,6 +829,15 @@ export const exportLaporanPengukuranByPeriod = async (
     const isKader = user && (user.role === 'kader' || user.role === 'Kader' || user.role === 'KADER');
     const kaderPosyanduId = user?.posyandu_id;
 
+    // DEBUG: Log data sebelum filtering
+    console.log('=== EXPORT DEBUG INFO ===');
+    console.log('Period:', period, 'Month:', month, 'Year:', year);
+    console.log('Months to check:', monthsList.map(m => `${m.month}/${m.year}`).join(', '));
+    console.log('Total pengukuran data received:', pengukuranData.length);
+    console.log('Is Kader:', isKader, 'Kader Posyandu ID:', kaderPosyanduId);
+    console.log('Total posyandu:', posyanduList.length);
+    console.log('Total balita:', balitaData.length);
+
     // Filter pengukuran berdasarkan periode dan user
     const filteredPengukuran = pengukuranData.filter(p => {
       const pDate = new Date(p.tanggal_pengukuran);
@@ -840,6 +849,17 @@ export const exportLaporanPengukuranByPeriod = async (
       return true;
     });
 
+    // DEBUG: Log filtered results
+    console.log('Filtered pengukuran count:', filteredPengukuran.length);
+    if (isKader) {
+      const notInPeriod = pengukuranData.filter(p => {
+        const pDate = new Date(p.tanggal_pengukuran);
+        return !monthsList.some(m => pDate.getMonth() + 1 === m.month && pDate.getFullYear() === m.year);
+      }).length;
+      const wrongPosyandu = pengukuranData.filter(p => p.posyandu_id !== kaderPosyanduId).length;
+      console.log('Pengukuran filtered out - wrong period:', notInPeriod, 'wrong posyandu:', wrongPosyandu);
+    }
+
     // Group pengukuran by posyandu
     const posyanduGroups = {};
     filteredPengukuran.forEach(p => {
@@ -850,11 +870,12 @@ export const exportLaporanPengukuranByPeriod = async (
       posyanduGroups[posyanduId].push(p);
     });
 
-    // Group balita by posyandu (untuk mereka yang punya pengukuran di periode ini)
+    // Group balita by posyandu - TAMPILKAN SEMUA BALITA, bukan hanya yang punya pengukuran
     const balitaByPosyandu = {};
-    Object.keys(posyanduGroups).forEach(posyanduId => {
-      const pengukuranIds = new Set(posyanduGroups[posyanduId].map(p => p.balita_id));
-      balitaByPosyandu[posyanduId] = balitaData.filter(b => pengukuranIds.has(b.id));
+    posyanduList.forEach(posyandu => {
+      const posyanduId = posyandu.id;
+      // Filter balita berdasarkan posyandu, include semua balita (tidak hanya yang punya pengukuran)
+      balitaByPosyandu[posyanduId] = balitaData.filter(b => b.posyandu_id === posyanduId);
     });
 
     // Helper function untuk membuat sheet per posyandu
@@ -920,12 +941,14 @@ export const exportLaporanPengukuranByPeriod = async (
 
       // Set column widths
       worksheet.getColumn(colMapping['no']).width = 5;
-      worksheet.getColumn(colMapping['nama']).width = 25;
+      worksheet.getColumn(colMapping['nama']).width = 50;
       worksheet.getColumn(colMapping['nik']).width = 18;
       worksheet.getColumn(colMapping['jk']).width = 15;
       monthsList.forEach(m => {
         for (let i = 0; i < 10; i++) {
-          worksheet.getColumn(monthColStart[`${m.month}`] + i).width = 14;
+          const col = worksheet.getColumn(monthColStart[`${m.month}`] + i);
+          // h2 (Lingkar Kepala) adalah index 4, set width 50. Lainnya width 14
+          col.width = (i === 4) ? 50 : 14;
         }
       });
 
@@ -984,9 +1007,9 @@ export const exportLaporanPengukuranByPeriod = async (
             // BB
             worksheet.getCell(rowNum, colStart + 2).value = formatNumber(monthPengukuran.berat_badan, 2);
             // Lingkar Lengan
-            worksheet.getCell(rowNum, colStart + 3).value = formatNumber(monthPengukuran.lingkar_lengan, 1) || '-';
+            worksheet.getCell(rowNum, colStart + 3).value = formatNumber(monthPengukuran.lingkar_lengan, 1) || 'absen';
             // Lingkar Kepala
-            worksheet.getCell(rowNum, colStart + 4).value = formatNumber(monthPengukuran.lingkar_kepala, 1) || '-';
+            worksheet.getCell(rowNum, colStart + 4).value = formatNumber(monthPengukuran.lingkar_kepala, 1) || 'absen';
             // Z-Score BB
             worksheet.getCell(rowNum, colStart + 5).value = formatNumber(monthPengukuran.zscore_bbu, 2) || '-';
             // Z-Score TB
@@ -1070,7 +1093,8 @@ export const exportLaporanPengukuranByPeriod = async (
       worksheet.getColumn(4).width = 18;
       worksheet.getColumn(5).width = 15;
       for (let i = 6; i < colIndex; i++) {
-        worksheet.getColumn(i).width = 14;
+        // h2 (Lingkar Kepala) adalah column 10, set width 50. Lainnya width 14
+        worksheet.getColumn(i).width = (i === 10) ? 50 : 14;
       }
 
       // Add data
@@ -1103,8 +1127,8 @@ export const exportLaporanPengukuranByPeriod = async (
             worksheet.getCell(rowNum, 6).value = balitaPengukuran.usia_bulan || '-';
             worksheet.getCell(rowNum, 7).value = formatNumber(balitaPengukuran.tinggi_badan, 1);
             worksheet.getCell(rowNum, 8).value = formatNumber(balitaPengukuran.berat_badan, 2);
-            worksheet.getCell(rowNum, 9).value = formatNumber(balitaPengukuran.lingkar_lengan, 1) || '-';
-            worksheet.getCell(rowNum, 10).value = formatNumber(balitaPengukuran.lingkar_kepala, 1) || '-';
+            worksheet.getCell(rowNum, 9).value = formatNumber(balitaPengukuran.lingkar_lengan, 1) || 'absen';
+            worksheet.getCell(rowNum, 10).value = formatNumber(balitaPengukuran.lingkar_kepala, 1) || 'absen';
             worksheet.getCell(rowNum, 11).value = formatNumber(balitaPengukuran.zscore_bbu, 2) || '-';
             worksheet.getCell(rowNum, 12).value = formatNumber(balitaPengukuran.zscore_tbu, 2) || '-';
             worksheet.getCell(rowNum, 13).value = balitaPengukuran.status_gizi || '-';

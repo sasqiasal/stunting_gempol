@@ -85,11 +85,27 @@ const PengukuranPage = () => {
         params.bulan = selectedMonth.value;
       }
       const data = await pengukuranService.getAll(params);
-      // Sort by tanggal_pengukuran DESC (newest first)
+      
+      // Sort by created_at DESC (newest input first) atau tanggal_pengukuran + id
       const sortedData = data.sort((a, b) => {
-        if (!a.tanggal_pengukuran || !b.tanggal_pengukuran) return 0;
-        return new Date(b.tanggal_pengukuran) - new Date(a.tanggal_pengukuran);
+        // Primary: tanggal_pengukuran DESC
+        const dateA = new Date(a.tanggal_pengukuran);
+        const dateB = new Date(b.tanggal_pengukuran);
+        const dateCompare = dateB - dateA;
+        
+        if (dateCompare !== 0) return dateCompare;
+        
+        // Secondary: created_at DESC (jika tanggal sama, yang terbaru di atas)
+        if (a.created_at && b.created_at) {
+          return new Date(b.created_at) - new Date(a.created_at);
+        }
+        
+        // Tertiary: id DESC (fallback jika created_at null)
+        return b.id - a.id;
       });
+      
+      console.log("📊 Sorted data (first 3):", sortedData.slice(0, 3).map(d => ({ id: d.id, tanggal: d.tanggal_pengukuran, created: d.created_at, nama: d.balita_nama })));
+      
       setPengukuranList(sortedData);
     } catch (error) {
       console.error("Error loading pengukuran:", error);
@@ -238,8 +254,8 @@ const PengukuranPage = () => {
         }
       }
 
-      const data = await pengukuranService.getAll({ limit: 500 });
-      const balita = await balitaService.getAll({ limit: 500 });
+      const data = await pengukuranService.getAll({ limit: 999999 });
+      const balita = await balitaService.getAll({ limit: 999999 });
       const posyandu = await posyanduService.getAll();
 
       // Import fungsi export yang sesuai
@@ -386,9 +402,11 @@ const PengukuranPage = () => {
                           return searchNamaBalita === '' || namaBalita.includes(searchNamaBalita);
                         })
                         .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-                        .map((pengukuran, index) => (
+                        .map((pengukuran, index) => {
+                          const nomor = (currentPage - 1) * itemsPerPage + index + 1;
+                          return (
                         <tr key={pengukuran.id} className="hover:bg-gray-50 even:bg-gray-50/50">
-                          <td className="px-4 py-3 text-center text-sm text-gray-900">{index + 1}</td>
+                          <td className="px-4 py-3 text-center text-sm text-gray-900">{nomor}</td>
                           <td className="px-4 py-3 text-sm text-gray-900">{formatDate(pengukuran.tanggal_pengukuran)}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
@@ -450,7 +468,8 @@ const PengukuranPage = () => {
                             </button>
                           </td>
                         </tr>
-                      ))
+                        );
+                        })
                     )}
                   </tbody>
                 </table>

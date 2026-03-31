@@ -46,7 +46,7 @@ async def create_posyandu(
 @router.get("/", response_model=List[PosyanduResponse])
 async def get_all_posyandu(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=99999),
     supabase_client = Depends(get_supabase)
 ):
     """

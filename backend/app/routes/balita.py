@@ -69,7 +69,7 @@ async def create_balita(
 @router.get("/", response_model=List[BalitaResponse])
 async def get_all_balita(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=99999),
     posyandu_id: Optional[int] = None,
     status_terkini: Optional[str] = None,
     current_user: dict = Depends(get_current_user),

@@ -489,7 +489,7 @@ async def get_detail_evaluasi(
 @router.get("/", response_model=List[PengukuranWithBalita])
 async def get_all_pengukuran(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=99999),
     balita_id: Optional[int] = None,
     posyandu_id: Optional[int] = None,
     prediksi_stunting: Optional[bool] = None,
@@ -541,8 +541,9 @@ async def get_all_pengukuran(
             except (ValueError, IndexError) as e:
                 print(f"⚠️ Invalid bulan format: {bulan}, ignoring filter")
         
-        # Pagination
-        query = query.range(skip, skip + limit - 1).order("tanggal_pengukuran", desc=True)
+        # Pagination & Ordering
+        # Sort by: 1) tanggal_pengukuran DESC, 2) created_at DESC (untuk data same-day)
+        query = query.range(skip, skip + limit - 1).order("tanggal_pengukuran", desc=True).order("created_at", desc=True)
         
         response = query.execute()
         print(f"✅ Query executed successfully, got {len(response.data)} records")

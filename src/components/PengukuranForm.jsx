@@ -18,6 +18,7 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
   const [selectedBalita, setSelectedBalita] = useState(null);
   const [selectedBalitaOption, setSelectedBalitaOption] = useState(null);
   const [calculatedAge, setCalculatedAge] = useState(null);
+  const [measuredBalitasThisMonth, setMeasuredBalitasThisMonth] = useState([]);
 
   // 4-class classification labels
   const getClassificationLabel = (classNum) => {
@@ -119,6 +120,12 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
   }, []);
 
   useEffect(() => {
+    if (watchBulanPengukuran) {
+      loadMeasuredBalitas(watchBulanPengukuran);
+    }
+  }, [watchBulanPengukuran]);
+
+  useEffect(() => {
     if (watchBalitaId) {
       const balita = balitaList.find((b) => b.id === parseInt(watchBalitaId));
       setSelectedBalita(balita);
@@ -145,6 +152,20 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
     } catch (error) {
       console.error("Error loading balita:", error);
       toast.error("Gagal memuat data balita");
+    }
+  };
+
+  const loadMeasuredBalitas = async (monthParam) => {
+    try {
+      const params = { limit: 500, bulan: monthParam };
+      const data = await pengukuranService.getAll(params);
+      // Extract unique balita_id dari pengukuran bulan ini
+      const balitaIds = data.map((p) => p.balita_id);
+      setMeasuredBalitasThisMonth([...new Set(balitaIds)]);
+    } catch (error) {
+      console.error("Error loading measured balitas:", error);
+      // Silently fail, jangan toast error karena ini background operation
+      setMeasuredBalitasThisMonth([]);
     }
   };
 
@@ -259,10 +280,21 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
           </label>
           <Select
             value={selectedBalitaOption}
-            options={balitaList.map((balita) => ({
-              value: balita.id,
-              label: `${censorChildName(balita.nama_lengkap)} - ${balita.nik}`,
-            }))}
+            options={balitaList
+              .sort((a, b) => {
+                // Balita belum diukur di atas, sudah diukur di bawah
+                const aIsMeasured = measuredBalitasThisMonth.includes(a.id);
+                const bIsMeasured = measuredBalitasThisMonth.includes(b.id);
+                if (aIsMeasured === bIsMeasured) return 0;
+                return aIsMeasured ? 1 : -1;
+              })
+              .map((balita) => ({
+                value: balita.id,
+                label: measuredBalitasThisMonth.includes(balita.id) 
+                  ? `${censorChildName(balita.nama_lengkap)} - ${balita.nik} (Sudah diukur)` 
+                  : `${censorChildName(balita.nama_lengkap)} - ${balita.nik}`,
+                isDisabled: measuredBalitasThisMonth.includes(balita.id),
+              }))}
             onChange={(selectedOption) => {
               setSelectedBalitaOption(selectedOption);
               setValue("balita_id", selectedOption ? selectedOption.value : "", {
@@ -293,9 +325,10 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
               option: (base, state) => ({
                 ...base,
                 backgroundColor: state.isSelected ? "#3b82f6" : state.isFocused ? "#dbeafe" : "white",
-                color: state.isSelected ? "white" : "#1f2937",
+                color: state.isDisabled ? "#9ca3af" : state.isSelected ? "white" : "#1f2937",
                 padding: "12px 16px",
-                cursor: "pointer",
+                cursor: state.isDisabled ? "not-allowed" : "pointer",
+                opacity: state.isDisabled ? 0.6 : 1,
               }),
               menu: (base) => ({
                 ...base,
