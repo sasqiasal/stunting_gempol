@@ -1,6 +1,7 @@
 /**
  * Authentication Service
  * Service untuk login, register, dan get current user
+ * Dioptimalkan untuk sistem Stunting Desa Gempol
  */
 
 import apiClient from './api';
@@ -9,43 +10,57 @@ export const authService = {
   /**
    * Login user
    * @param {Object} credentials - Email dan password
-   * @returns {Promise}
    */
   login: async (credentials) => {
-    const response = await apiClient.post('/auth/login', credentials);
-    
-    console.log('🔐 LOGIN RESPONSE from backend:', response.data);
-    console.log('🔐 User object:', response.data.user);
-    console.log('🔐 User posyandu_id:', response.data.user?.posyandu_id);
-    
-    // Simpan token dan user data
-    if (response.data.access_token) {
-      localStorage.setItem('access_token', response.data.access_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+    try {
+      console.log('🔐 Login attempt:', { email: credentials.email });
+      console.log('📡 API Base URL:', apiClient.defaults.baseURL);
       
-      console.log('💾 Saved to localStorage:', JSON.parse(localStorage.getItem('user')));
+      const response = await apiClient.post('/auth/login', credentials);
       
-      // Log login activity ke database
-      try {
-        await apiClient.post('/akun/login-logs', {
-          user_id: response.data.user.id,
-          user_name: response.data.user.nama_lengkap,
-          user_email: response.data.user.email,
-          user_role: response.data.user.role
+      const { access_token, user } = response.data;
+
+      // 1. Simpan token dan data user ke localStorage jika login berhasil
+      if (access_token && user) {
+        localStorage.setItem('access_token', access_token);
+        localStorage.setItem('user', JSON.stringify(user));
+        
+        console.log('✅ Login Berhasil:', user.nama_lengkap);
+
+        /**
+         * 2. Log login activity ke database (Background Process)
+         * Kunci: Jangan gunakan 'await' di sini agar tidak menghambat loading dashboard
+         */
+        apiClient.post('/akun/login-logs', {
+          user_id: user.id,
+          user_name: user.nama_lengkap,
+          user_email: user.email,
+          user_role: user.role
+        }).catch(err => {
+          console.warn('⚠️ Log aktivitas gagal (abaikan):', err.message);
         });
-      } catch (error) {
-        // Jangan fail login jika log gagal
-        console.warn('Failed to log login activity:', error);
+
+      } else {
+        throw new Error("Data user tidak ditemukan dalam respon server.");
       }
+      
+      return response.data;
+
+    } catch (error) {
+      const errorMsg = error.response?.data?.detail || error.message;
+      console.error('❌ Login Error:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        detail: errorMsg,
+        fullUrl: error.config?.url,
+        method: error.config?.method
+      });
+      throw error; // Lempar error agar bisa ditangkap oleh UI (LoginPage)
     }
-    
-    return response.data;
   },
 
   /**
    * Register user baru
-   * @param {Object} userData - Data user
-   * @returns {Promise}
    */
   register: async (userData) => {
     const response = await apiClient.post('/auth/register', userData);
@@ -53,38 +68,48 @@ export const authService = {
   },
 
   /**
-   * Get current user
-   * @returns {Promise}
+   * Mendapatkan data user terbaru dari server
    */
   getCurrentUser: async () => {
-    const response = await apiClient.get('/auth/me');
-    localStorage.setItem('user', JSON.stringify(response.data));
-    return response.data;
+    try {
+      const response = await apiClient.get('/auth/me');
+      if (response.data) {
+        localStorage.setItem('user', JSON.stringify(response.data));
+      }
+      return response.data;
+    } catch (error) {
+      console.error('Gagal mengambil data user:', error);
+      return null;
+    }
   },
 
   /**
-   * Logout user
+   * Logout user dan bersihkan session
    */
   logout: () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
+    // Redirect langsung ke login
     window.location.href = '/login';
   },
 
   /**
-   * Check if user is authenticated
-   * @returns {boolean}
+   * Cek status autentikasi
    */
   isAuthenticated: () => {
-    return !!localStorage.getItem('access_token');
+    const token = localStorage.getItem('access_token');
+    return !!token;
   },
 
   /**
-   * Get user from localStorage
-   * @returns {Object|null}
+   * Ambil data user dari penyimpanan lokal
    */
   getUser: () => {
-    const userStr = localStorage.getItem('user');
-    return userStr ? JSON.parse(userStr) : null;
+    try {
+      const userStr = localStorage.getItem('user');
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (e) {
+      return null;
+    }
   },
 };

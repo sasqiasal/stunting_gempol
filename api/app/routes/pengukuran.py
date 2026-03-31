@@ -183,11 +183,12 @@ async def create_pengukuran(
     
     Flow:
     1. Ambil data balita
-    2. Hitung usia saat pengukuran
-    3. Hitung Z-Score BB/U dan TB/U
-    4. Prediksi stunting menggunakan model KNN
-    5. Simpan ke database
-    6. Update status_terkini di tabel balita
+    2. Validasi tanggal pengukuran (harus dalam 3 bulan + bulan saat ini ke belakang)
+    3. Hitung usia saat pengukuran
+    4. Hitung Z-Score BB/U dan TB/U
+    5. Prediksi stunting menggunakan model KNN
+    6. Simpan ke database
+    7. Update status_terkini di tabel balita
     """
     # 1. Ambil data balita
     balita_response = supabase_client.table("balita").select("*").eq("id", pengukuran_data.balita_id).execute()
@@ -200,12 +201,33 @@ async def create_pengukuran(
     
     balita = balita_response.data[0]
     
-    # 2. Hitung usia saat pengukuran
+    # 2. Validasi tanggal pengukuran (harus dalam 3 bulan + bulan saat ini ke belakang)
+    tgl_ukur = pengukuran_data.tanggal_pengukuran or date.today()
+    today = date.today()
+    
+    # Hitung min date: 3 bulan sebelumnya dari hari pertama bulan saat ini
+    first_day_current_month = today.replace(day=1)
+    min_date = first_day_current_month - timedelta(days=90)  # ~3 bulan
+    min_date = min_date.replace(day=1)  # Set ke hari pertama bulan min
+    
+    # Max date: hari terakhir bulan saat ini
+    if today.month == 12:
+        max_date = date(today.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        max_date = date(today.year, today.month + 1, 1) - timedelta(days=1)
+    
+    if tgl_ukur < min_date or tgl_ukur > max_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tanggal pengukuran harus dalam range {min_date.strftime('%Y-%m-%d')} sampai {max_date.strftime('%Y-%m-%d')} (bulan saat ini + 3 bulan sebelumnya)"
+        )
+    
+    # 3. Hitung usia saat pengukuran
     tanggal_lahir = date.fromisoformat(balita["tanggal_lahir"])
-    usia_bulan = calculate_age_in_months(tanggal_lahir)
+    usia_bulan = calculate_age_in_months(tanggal_lahir, tgl_ukur)
     jenis_kelamin = balita["jenis_kelamin"]
     
-    # 3. Prediksi stunting (termasuk kalkulasi Z-Score)
+    # 4. Prediksi stunting (termasuk kalkulasi Z-Score)
     prediksi_result = prediction_service.predict_stunting(
         jenis_kelamin=jenis_kelamin,
         usia_bulan=usia_bulan,
@@ -215,26 +237,37 @@ async def create_pengukuran(
         lingkar_kepala=pengukuran_data.lingkar_kepala
     )
     
-    # 4. Siapkan data untuk disimpan
+    # 5. Siapkan data untuk disimpan
     pengukuran_dict = pengukuran_data.model_dump()
+    
+    # Determine prediksi_stunting boolean from 4-class label for backward compatibility
+    status_gizi_label = int(prediksi_result["status_gizi_label"])
+    is_stunting = status_gizi_label in [2, 3]  # Labels 2,3 = Stunting
+    
     pengukuran_dict.update({
         "kader_id": current_user["id"],
         "usia_bulan": usia_bulan,
         "jenis_kelamin": jenis_kelamin,
         "zscore_bbu": float(prediksi_result["zscore_bbu"]),
         "zscore_tbu": float(prediksi_result["zscore_tbu"]),
+        # Status gizi sekarang menggunakan 4 kelas dari model KNN
         "status_gizi": prediksi_result["status_gizi"],
-        "prediksi_stunting": bool(prediksi_result["prediksi_stunting"]),
+        # Keep prediksi_stunting for backward compatibility (True=stunting, False=normal)
+        "prediksi_stunting": is_stunting,
+        # Label klasifikasi integer (0, 1, 2, 3) - will be stored when DB is updated
+        # For now, keep it in detail_prediksi only
         "confidence_score": float(prediksi_result["confidence_score"]),
-        # Gunakan waktu server dengan timezone (aware) agar Supabase menyimpan waktu yang akurat
-        "tanggal_pengukuran": datetime.now().astimezone().isoformat(),
+        # Gunakan tanggal pengukuran yang dikirim (retroaktif) atau waktu sekarang
+        "tanggal_pengukuran": datetime.combine(tgl_ukur, datetime.min.time()).astimezone().isoformat(),
         "created_at": datetime.now().astimezone().isoformat(),
-        # Simpan detail prediksi (termasuk nearest_neighbors)
+        # Simpan detail prediksi (termasuk nearest_neighbors dan label 4 kelas)
         "detail_prediksi": {
+            "status_gizi_label": status_gizi_label,
             "nearest_neighbors": prediksi_result.get("nearest_neighbors", []),
-            "version": "1.0", 
-            "model": "KNN",
-            "k": 5
+            "version": "2.0", 
+            "model": "KNN-4Class",
+            "k": 5,
+            "classes": ["Normal + Gizi Baik", "Normal + Kurang Gizi", "Stunting + Gizi Baik", "Stunting + Kurang Gizi"]
         }
     })
     
@@ -288,6 +321,16 @@ async def create_pengukuran(
         "usia_bulan": usia_bulan
     }).eq("id", pengukuran_data.balita_id).execute()
     
+    # Add status_gizi_label to response (required by response model)
+    STATUS_GIZI_MAPPING = {
+        "Normal + Gizi Baik": 0,
+        "Normal + Kurang Gizi": 1,
+        "Stunting + Gizi Baik": 2,
+        "Stunting + Kurang Gizi": 3,
+    }
+    status_gizi = pengukuran.get("status_gizi", "Normal")
+    pengukuran["status_gizi_label"] = STATUS_GIZI_MAPPING.get(status_gizi, 0)
+    
     return pengukuran
 
 @router.put("/{id}", response_model=PengukuranResponse)
@@ -324,9 +367,9 @@ async def update_pengukuran(
 
     balita = balita_response.data[0]
 
-    # 3. Hitung ulang usia saat pengukuran (berdasarkan tanggal pengukuran asli)
-    tanggal_lahir = date.fromisoformat(balita["tanggal_lahir"])
-    usia_bulan = calculate_age_in_months(tanggal_lahir)
+    # 3. Gunakan usia_bulan yang sudah tersimpan (JANGAN RECALCULATE untuk konsistensi)
+    # Usia_bulan harus tetap sama seperti saat create, agar klasifikasi tetap konsisten
+    usia_bulan = pengukuran_existing["usia_bulan"]
     jenis_kelamin = balita["jenis_kelamin"]
 
     # 4. Prediksi ulang stunting
@@ -340,6 +383,10 @@ async def update_pengukuran(
     )
 
     # 5. Update tabel pengukuran
+    # Determine stunting status from 4-class label for backward compatibility  
+    status_gizi_label = int(prediksi_result["status_gizi_label"])
+    is_stunting = status_gizi_label in [2, 3]  # Labels 2,3 = Stunting
+    
     update_dict = {
         "tinggi_badan": float(pengukuran_data.tinggi_badan),
         "berat_badan": float(pengukuran_data.berat_badan),
@@ -349,8 +396,10 @@ async def update_pengukuran(
         "usia_bulan": usia_bulan,
         "zscore_bbu": float(prediksi_result["zscore_bbu"]),
         "zscore_tbu": float(prediksi_result["zscore_tbu"]),
+        # Status gizi menggunakan 4 kelas dari model KNN
         "status_gizi": prediksi_result["status_gizi"],
-        "prediksi_stunting": bool(prediksi_result["prediksi_stunting"]),
+        # Keep prediksi_stunting for backward compatibility
+        "prediksi_stunting": is_stunting,
         "confidence_score": float(prediksi_result["confidence_score"]),
     }
 
@@ -399,6 +448,16 @@ async def update_pengukuran(
         print(f"⚠️ Error updating pengukuran: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Terjadi kesalahan: {str(e)}")
 
+    # Add status_gizi_label to response (required by response model)
+    STATUS_GIZI_MAPPING = {
+        "Normal + Gizi Baik": 0,
+        "Normal + Kurang Gizi": 1,
+        "Stunting + Gizi Baik": 2,
+        "Stunting + Kurang Gizi": 3,
+    }
+    status_gizi = updated_pengukuran.get("status_gizi", "Normal")
+    updated_pengukuran["status_gizi_label"] = STATUS_GIZI_MAPPING.get(status_gizi, 0)
+    
     return updated_pengukuran
 
 @router.get("/{id}/detail-evaluasi", response_model=Dict[str, Any])
@@ -478,7 +537,8 @@ async def get_all_pengukuran(
         if balita_id:
             query = query.eq("balita_id", balita_id)
         
-        # Filter berdasarkan prediksi stunting
+        # Filter berdasarkan status stunting (backward compatible)
+        # For now, use prediksi_stunting column; will migrate to status_gizi_label after DB update
         if prediksi_stunting is not None:
             query = query.eq("prediksi_stunting", prediksi_stunting)
         
@@ -508,15 +568,36 @@ async def get_all_pengukuran(
         print(f"✅ Query executed successfully, got {len(response.data)} records")
         
         # Transform data untuk response
+        # Classification mapping for status_gizi_label
+        STATUS_GIZI_MAPPING = {
+            "Normal + Gizi Baik": 0,
+            "Normal + Kurang Gizi": 1,
+            "Stunting + Gizi Baik": 2,
+            "Stunting + Kurang Gizi": 3,
+        }
+        
         results = []
         for item in response.data:
             result = {**item}
             
+            # Add status_gizi_label based on status_gizi string
+            # This is required by the response model
+            status_gizi = result.get("status_gizi", "Normal")
+            result["status_gizi_label"] = STATUS_GIZI_MAPPING.get(status_gizi, 0)
+            
             # Flatten data balita
             if "balita" in item and item["balita"]:
-                result["balita_nama"] = item["balita"].get("nama_lengkap")
-                result["balita_nik"] = item["balita"].get("nik")
+                result["balita_nama"] = item["balita"].get("nama_lengkap") or "-"
+                result["balita_nik"] = item["balita"].get("nik") or "-"
                 result["posyandu_id"] = item["balita"].get("posyandu_id")
+                
+                # Fetch posyandu nama if possible
+                if "posyandu" in item and item["posyandu"] and "posyandu" in item["posyandu"]:
+                    if isinstance(item["posyandu"]["posyandu"], dict):
+                        result["posyandu_nama"] = item["posyandu"]["posyandu"].get("nama")
+            else:
+                result["balita_nama"] = "-"
+                result["balita_nik"] = "-"
             
             results.append(result)
         
@@ -577,7 +658,7 @@ async def get_statistik_summary(
     total_response = query.execute()
     total_pengukuran = total_response.count or 0
     
-    # Query untuk stunting
+    # Query untuk stunting (using prediksi_stunting for backward compatibility)
     stunting_query = supabase_client.table("pengukuran").select("*", count="exact").eq("prediksi_stunting", True)
     
     if posyandu_id:
@@ -617,7 +698,7 @@ async def get_riwayat_stunting(
     now = datetime.now()
     six_months_ago = now - timedelta(days=180)  # Approx 6 bulan
     
-    # Query pengukuran dengan filter stunting = true dan 6 bulan terakhir
+    # Query pengukuran dengan filter stunting (prediksi_stunting=true) dan 6 bulan terakhir
     query = supabase_client.table("pengukuran").select(
         "id, tanggal_pengukuran, prediksi_stunting, balita:balita_id(posyandu_id)"
     ).eq("prediksi_stunting", True).gte("tanggal_pengukuran", six_months_ago.isoformat())

@@ -62,6 +62,34 @@ export const getAllUsers = async () => {
 /**
  * Reset user password (Admin only)
  */
+
+/**
+ * Delete user (Admin only)
+ */
+
+/**
+ * Update user (Admin only)
+ */
+export const updateUser = async (userId, userData) => {
+  try {
+    const response = await api.put(`/akun/users/${userId}`, userData);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating user:', error);
+    throw error.response?.data || { detail: 'Gagal mengupdate user' };
+  }
+};
+
+export const deleteUser = async (userId) => {
+  try {
+    const response = await api.delete(`/akun/users/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    throw error.response?.data || { detail: 'Gagal menghapus user' };
+  }
+};
+
 export const resetUserPassword = async (userId, newPassword) => {
   try {
     const response = await api.post('/akun/reset-password', {
@@ -111,6 +139,8 @@ export default {
   createNewUser,
   getAccountStats,
   getAllUsers,
+  updateUser,
+  deleteUser,
   resetUserPassword,
   formatLoginTime,
   getRelativeTime

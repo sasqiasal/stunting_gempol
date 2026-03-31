@@ -18,6 +18,45 @@ const isStunting = (data) => {
 };
 
 /**
+ * Helper untuk menghitung status gizi AKTUAL dari Z-Score
+ * Class 0: Normal + Gizi Baik (ZTB >= -2.0 AND ZBB >= -1.0)
+ * Class 1: Normal + Kurang Gizi (ZTB >= -2.0 AND ZBB < -1.0)
+ * Class 2: Stunting + Gizi Baik (ZTB < -2.0 AND ZBB >= -1.0)
+ * Class 3: Stunting + Kurang Gizi (ZTB < -2.0 AND ZBB < -1.0)
+ * @param {Object} data - Data pengukuran
+ * @returns {string} Status gizi aktual
+ */
+const calculateActualNutritionStatus = (data) => {
+  const zscore_tbu = parseFloat(data.zscore_tbu) || 0;
+  const zscore_bbu = parseFloat(data.zscore_bbu) || 0;
+  
+  const isStunting = zscore_tbu < -2.0;
+  const isKurangGizi = zscore_bbu < -1.0;
+  
+  if (!isStunting && !isKurangGizi) {
+    return "Normal + Gizi Baik";
+  } else if (!isStunting && isKurangGizi) {
+    return "Normal + Kurang Gizi";
+  } else if (isStunting && !isKurangGizi) {
+    return "Stunting + Gizi Baik";
+  } else {
+    return "Stunting + Kurang Gizi";
+  }
+};
+
+/**
+ * Helper untuk membandingkan status gizi yang tersimpan dengan status aktual
+ * @param {string} storedStatus - Status gizi yang tersimpan
+ * @param {string} actualStatus - Status gizi yang dihitung dari Z-Score
+ * @returns {string} "Sesuai" atau "Tidak Sesuai"
+ */
+const validateNutritionStatus = (storedStatus, actualStatus) => {
+  // Normalize for comparison
+  const normalize = (str) => str ? str.trim().toLowerCase() : '';
+  return normalize(storedStatus) === normalize(actualStatus) ? "Sesuai" : "Tidak Sesuai";
+};
+
+/**
  * Helper untuk styling row stunting dengan warna merah
  * @param {Object} row - Excel row object
  */
@@ -173,15 +212,46 @@ export const exportPengukuranToExcel = async (data, posyanduList = [], user = nu
       });
     }
 
-    // Add additional info
-    summarySheet.getCell(`A${currentRow + 2}`).value = 'Keterangan:';
-    summarySheet.getCell(`A${currentRow + 2}`).font = { bold: true };
-    summarySheet.getCell(`A${currentRow + 3}`).value = '• Data berdasarkan pengukuran yang tercatat dalam sistem';
-    summarySheet.getCell(`A${currentRow + 4}`).value = '• Balita dikategorikan stunting jika Z-Score TB/U < -2';
-    summarySheet.getCell(`A${currentRow + 5}`).value = '• Detail lengkap tersedia pada sheet per posyandu';
-    
-    for (let i = currentRow + 3; i <= currentRow + 5; i++) {
-      summarySheet.getCell(`A${i}`).font = { italic: true, size: 10 };
+    // Add per-posyandu stunting breakdown if admin or comprehensive view
+    const posyanduStuntingBreakdown = {};
+    filteredData.forEach(d => {
+      const posyanduName = d.posyandu_nama || 'Tidak Diketahui';
+      if (!posyanduStuntingBreakdown[posyanduName]) {
+        posyanduStuntingBreakdown[posyanduName] = { total: 0, stunting: 0 };
+      }
+      posyanduStuntingBreakdown[posyanduName].total++;
+      if (d.prediksi_stunting === true || d.prediksi_stunting === 1) {
+        posyanduStuntingBreakdown[posyanduName].stunting++;
+      }
+    });
+
+    // Only show posyandu with stunting cases
+    const stuntingPosyandu = Object.keys(posyanduStuntingBreakdown).filter(
+      name => posyanduStuntingBreakdown[name].stunting > 0
+    ).sort();
+
+    if (stuntingPosyandu.length > 0) {
+      summarySheet.getCell(`A${currentRow + 2}`).value = 'ANAK STUNTING PER POSYANDU';
+      summarySheet.getCell(`A${currentRow + 2}`).font = { bold: true, size: 12 };
+      summarySheet.getCell(`A${currentRow + 2}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE5E7EB' },
+      };
+      summarySheet.mergeCells(`A${currentRow + 2}:D${currentRow + 2}`);
+      summarySheet.getRow(currentRow + 2).height = 20;
+
+      let breakdownRow = currentRow + 3;
+      stuntingPosyandu.forEach(posyanduName => {
+        const breakdown = posyanduStuntingBreakdown[posyanduName];
+        summarySheet.getCell(`A${breakdownRow}`).value = posyanduName;
+        summarySheet.getCell(`A${breakdownRow}`).font = { bold: true };
+        summarySheet.getCell(`C${breakdownRow}`).value = breakdown.stunting;
+        summarySheet.getCell(`C${breakdownRow}`).font = { bold: true, color: { argb: 'FFEF4444' } };
+        summarySheet.getCell(`C${breakdownRow}`).alignment = { horizontal: 'center' };
+        summarySheet.getCell(`D${breakdownRow}`).value = 'anak';
+        breakdownRow++;
+      });
     }
 
     // Create helper function for adding posyandu sheet
@@ -192,19 +262,20 @@ export const exportPengukuranToExcel = async (data, posyanduList = [], user = nu
       worksheet.columns = [
         { header: 'No', key: 'no', width: 5 },
         { header: 'Tanggal', key: 'tanggal', width: 12 },
-        { header: 'Nama Balita', key: 'nama', width: 25 },
+        { header: 'Nama Balita', key: 'nama', width: 50 },
         { header: 'NIK', key: 'nik', width: 18 },
+        { header: 'Tanggal Lahir', key: 'tgl_lahir', width: 15 },
         { header: 'Jenis Kelamin', key: 'jk', width: 15 },
         { header: 'Usia (bulan)', key: 'usia', width: 12 },
         { header: 'TB (cm)', key: 'tb', width: 10 },
         { header: 'BB (kg)', key: 'bb', width: 10 },
         { header: 'Lingkar Lengan (cm)', key: 'll', width: 18 },
-        { header: 'Lingkar Kepala (cm)', key: 'lk', width: 18 },
+        { header: 'Lingkar Kepala (cm)', key: 'lk', width: 50 },
         { header: 'Z-Score BB/U', key: 'zbb', width: 14 },
         { header: 'Z-Score TB/U', key: 'ztb', width: 14 },
         { header: 'Status Gizi', key: 'status', width: 20 },
-        { header: 'Prediksi', key: 'prediksi', width: 12 },
-        { header: 'Confidence', key: 'confidence', width: 12 },
+        { header: 'Status Gizi Aktual', key: 'status_aktual', width: 25 },
+        { header: 'Validasi Status', key: 'validasi', width: 18 },
       ];
 
       // Style header
@@ -219,11 +290,15 @@ export const exportPengukuranToExcel = async (data, posyanduList = [], user = nu
 
       // Add data
       posyanduData.forEach((item, index) => {
+        const actualStatus = calculateActualNutritionStatus(item);
+        const validation = validateNutritionStatus(item.status_gizi, actualStatus);
+        
         worksheet.addRow({
           no: index + 1,
           tanggal: formatDate(item.tanggal_pengukuran),
           nama: item.balita_nama || '-',
           nik: item.balita_nik || '-',
+          tgl_lahir: formatDate(item.tanggal_lahir),
           jk: getJenisKelaminLabel(item.jenis_kelamin),
           usia: item.usia_bulan,
           tb: formatNumber(item.tinggi_badan, 1),
@@ -233,8 +308,8 @@ export const exportPengukuranToExcel = async (data, posyanduList = [], user = nu
           zbb: formatNumber(item.zscore_bbu, 2),
           ztb: formatNumber(item.zscore_tbu, 2),
           status: item.status_gizi,
-          prediksi: item.prediksi_stunting ? 'STUNTING' : 'NORMAL',
-          confidence: `${formatNumber(item.confidence_score * 100, 1)}%`,
+          status_aktual: actualStatus,
+          validasi: validation,
         });
       });
 
@@ -298,7 +373,7 @@ export const exportBalitaToExcel = async (data, filename = 'Data_Balita') => {
 
   worksheet.columns = [
     { header: 'No', key: 'no', width: 5 },
-    { header: 'Nama Lengkap', key: 'nama', width: 25 },
+    { header: 'Nama Lengkap', key: 'nama', width: 50 },
     { header: 'NIK', key: 'nik', width: 18 },
     { header: 'Jenis Kelamin', key: 'jk', width: 15 },
     { header: 'Tanggal Lahir', key: 'tgl_lahir', width: 12 },
@@ -550,15 +625,17 @@ const createDetailSheet = (workbook, data, sheetName) => {
   sheet.columns = [
     { header: 'No', key: 'no', width: 5 },
     { header: 'Tanggal', key: 'tanggal', width: 12 },
-    { header: 'Nama', key: 'nama', width: 25 },
+    { header: 'Nama', key: 'nama', width: 50 },
     { header: 'Jenis Kelamin', key: 'jk', width: 15 },
     { header: 'Usia (bulan)', key: 'usia', width: 12 },
     { header: 'Tinggi (cm)', key: 'tinggi', width: 12 },
     { header: 'Berat (kg)', key: 'berat', width: 12 },
     { header: 'Lingkar Lengan (cm)', key: 'll', width: 18 },
-    { header: 'Lingkar Kepala (cm)', key: 'lk', width: 18 },
+    { header: 'Lingkar Kepala (cm)', key: 'lk', width: 50 },
     { header: 'Z-Score BB/U', key: 'zbb', width: 14 },
     { header: 'Z-Score TB/U', key: 'ztb', width: 14 },
+    { header: 'Status Gizi Aktual', key: 'status_aktual', width: 25 },
+    { header: 'Validasi Status', key: 'validasi', width: 18 },
   ];
 
   // Style header
@@ -573,6 +650,9 @@ const createDetailSheet = (workbook, data, sheetName) => {
 
   // Add data
   data.forEach((item, index) => {
+    const actualStatus = calculateActualNutritionStatus(item);
+    const validation = validateNutritionStatus(item.status_gizi, actualStatus);
+    
     const row = sheet.addRow({
       no: index + 1,
       tanggal: formatDate(item.tanggal_pengukuran),
@@ -585,6 +665,8 @@ const createDetailSheet = (workbook, data, sheetName) => {
       lk: formatNumber(item.lingkar_kepala, 1),
       zbb: formatNumber(item.zscore_bbu, 2),
       ztb: formatNumber(item.zscore_tbu, 2),
+      status_aktual: actualStatus,
+      validasi: validation,
     });
 
     // Apply red styling if stunting
@@ -668,3 +750,437 @@ export const exportStatistikPosyanduToExcel = async (data, filename = 'Statistik
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, `${filename}_${new Date().getTime()}.xlsx`);
 };
+
+/**
+ * Helper: Dapatkan bulan berdasarkan periode
+ * @param {string} period - 'bulanan', 'H1' (Januari-Juni), atau 'H2' (Juli-Desember)
+ * @param {number} month - Bulan spesifik untuk periode bulanan (1-12)
+ * @param {number} year - Tahun
+ * @returns {Array} Array of {month: number, year: number, name: string}
+ */
+const getMonthsByPeriod = (period, month = null, year = new Date().getFullYear()) => {
+  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
+                      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  
+  if (period === 'bulanan' && month !== null) {
+    return [{ month, year, name: monthNames[month - 1] }];
+  } else if (period === 'H1') {
+    return [
+      { month: 9, year: year - 1, name: 'September' }, // September year-1
+      { month: 10, year: year - 1, name: 'Oktober' },
+      { month: 11, year: year - 1, name: 'November' },
+      { month: 12, year: year - 1, name: 'Desember' },
+      { month: 1, year, name: 'Januari' },
+      { month: 2, year, name: 'Februari' },
+    ];
+  } else if (period === 'H2') {
+    return [
+      { month: 3, year, name: 'Maret' },
+      { month: 4, year, name: 'April' },
+      { month: 5, year, name: 'Mei' },
+      { month: 6, year, name: 'Juni' },
+      { month: 7, year, name: 'Juli' },
+      { month: 8, year, name: 'Agustus' },
+    ];
+  }
+  return [];
+};
+
+/**
+ * Export Laporan Pengukuran dengan format riwayat per bulan
+ * Format: Balita | NIK | JK | [Bulan 1: Usia, TB, BB, LL, ZBB, ZTB, Status] | [Bulan 2: ...] | ...
+ * 
+ * @param {Array} pengukuranData - Data pengukuran
+ * @param {Array} balitaData - Data balita (untuk info nama, nik, jk)
+ * @param {Array} posyanduList - Daftar posyandu
+ * @param {string} period - 'bulanan', 'H1', atau 'H2'
+ * @param {number} month - Bulan untuk periode bulanan (1-12), tidak diperlukan untuk H1/H2
+ * @param {number} year - Tahun laporan
+ * @param {Object} user - User object (role, posyandu_id)
+ */
+export const exportLaporanPengukuranByPeriod = async (
+  pengukuranData,
+  balitaData,
+  posyanduList = [],
+  period = 'H1',
+  month = null,
+  year = new Date().getFullYear(),
+  user = null
+) => {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Sistem Deteksi Dini Stunting';
+    workbook.created = new Date();
+
+    // Dapatkan daftar bulan berdasarkan periode
+    const monthsList = getMonthsByPeriod(period, month, year);
+    
+    // Tentukan nama file berdasarkan periode
+    let periodLabel = '';
+    if (period === 'bulanan') {
+      const monthNames = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 
+                          'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+      periodLabel = `${monthNames[month - 1]}_${year}`;
+    } else {
+      periodLabel = `${period.toLowerCase()}_${year}`;
+    }
+
+    // Tentukan filter berdasarkan user role
+    const isKader = user && (user.role === 'kader' || user.role === 'Kader' || user.role === 'KADER');
+    const kaderPosyanduId = user?.posyandu_id;
+
+    // DEBUG: Log data sebelum filtering
+    console.log('=== EXPORT DEBUG INFO ===');
+    console.log('Period:', period, 'Month:', month, 'Year:', year);
+    console.log('Months to check:', monthsList.map(m => `${m.month}/${m.year}`).join(', '));
+    console.log('Total pengukuran data received:', pengukuranData.length);
+    console.log('Is Kader:', isKader, 'Kader Posyandu ID:', kaderPosyanduId);
+    console.log('Total posyandu:', posyanduList.length);
+    console.log('Total balita:', balitaData.length);
+
+    // Filter pengukuran berdasarkan periode dan user
+    const filteredPengukuran = pengukuranData.filter(p => {
+      const pDate = new Date(p.tanggal_pengukuran);
+      const isInPeriod = monthsList.some(m => pDate.getMonth() + 1 === m.month && pDate.getFullYear() === m.year);
+      
+      if (!isInPeriod) return false;
+      if (isKader && p.posyandu_id !== kaderPosyanduId) return false;
+      
+      return true;
+    });
+
+    // DEBUG: Log filtered results
+    console.log('Filtered pengukuran count:', filteredPengukuran.length);
+    if (isKader) {
+      const notInPeriod = pengukuranData.filter(p => {
+        const pDate = new Date(p.tanggal_pengukuran);
+        return !monthsList.some(m => pDate.getMonth() + 1 === m.month && pDate.getFullYear() === m.year);
+      }).length;
+      const wrongPosyandu = pengukuranData.filter(p => p.posyandu_id !== kaderPosyanduId).length;
+      console.log('Pengukuran filtered out - wrong period:', notInPeriod, 'wrong posyandu:', wrongPosyandu);
+    }
+
+    // Group pengukuran by posyandu
+    const posyanduGroups = {};
+    filteredPengukuran.forEach(p => {
+      const posyanduId = p.posyandu_id;
+      if (!posyanduGroups[posyanduId]) {
+        posyanduGroups[posyanduId] = [];
+      }
+      posyanduGroups[posyanduId].push(p);
+    });
+
+    // Group balita by posyandu - TAMPILKAN SEMUA BALITA, bukan hanya yang punya pengukuran
+    const balitaByPosyandu = {};
+    posyanduList.forEach(posyandu => {
+      const posyanduId = posyandu.id;
+      // Filter balita berdasarkan posyandu, include semua balita (tidak hanya yang punya pengukuran)
+      balitaByPosyandu[posyanduId] = balitaData.filter(b => b.posyandu_id === posyanduId);
+    });
+
+    // Helper function untuk membuat sheet per posyandu
+    const createPosyanduSheet = (posyanduName, balitaList, pengukuranByBalita) => {
+      const worksheet = workbook.addWorksheet(posyanduName.substring(0, 31));
+
+      // Setup columns: No, Nama Balita, NIK, Jenis Kelamin, kemudian 7 kolom per bulan
+      let colIndex = 1;
+      const colMapping = {}; // Store column index untuk setiap field
+      
+      // Fixed columns
+      worksheet.getCell(1, colIndex).value = 'No';
+      colMapping['no'] = colIndex++;
+      
+      worksheet.getCell(1, colIndex).value = 'Nama Balita';
+      colMapping['nama'] = colIndex++;
+      
+      worksheet.getCell(1, colIndex).value = 'NIK';
+      colMapping['nik'] = colIndex++;
+      
+      worksheet.getCell(1, colIndex).value = 'Jenis Kelamin';
+      colMapping['jk'] = colIndex++;
+
+      // Bulan columns
+      const monthColStart = {};
+      monthsList.forEach(m => {
+        monthColStart[`${m.month}`] = colIndex;
+        
+        // Merge header untuk bulan (10 sub-columns)
+        worksheet.mergeCells(1, colIndex, 1, colIndex + 9);
+        worksheet.getCell(1, colIndex).value = m.name;
+        worksheet.getCell(1, colIndex).font = { bold: true, size: 11 };
+        worksheet.getCell(1, colIndex).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF0284C7' },
+        };
+        worksheet.getCell(1, colIndex).font = { ...worksheet.getCell(1, colIndex).font, color: { argb: 'FFFFFFFF' } };
+        worksheet.getCell(1, colIndex).alignment = { horizontal: 'center', vertical: 'middle' };
+        
+        // Sub-headers untuk setiap bulan
+        const subHeaders = ['Usia (bulan)', 'TB (cm)', 'BB (kg)', 'Lingkar Lengan (cm)', 'Lingkar Kepala (cm)', 'Z-Score BB', 'Z-Score TB', 'Status Gizi', 'Status Gizi Aktual', 'Validasi Status'];
+        subHeaders.forEach((header, idx) => {
+          const cellCol = colIndex + idx;
+          worksheet.getCell(2, cellCol).value = header;
+          worksheet.getCell(2, cellCol).font = { bold: true, size: 10 };
+          worksheet.getCell(2, cellCol).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE5E7EB' },
+          };
+          worksheet.getCell(2, cellCol).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+          worksheet.getCell(2, cellCol).border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        });
+        
+        colIndex += 10;
+      });
+
+      // Set column widths
+      worksheet.getColumn(colMapping['no']).width = 5;
+      worksheet.getColumn(colMapping['nama']).width = 50;
+      worksheet.getColumn(colMapping['nik']).width = 18;
+      worksheet.getColumn(colMapping['jk']).width = 15;
+      monthsList.forEach(m => {
+        for (let i = 0; i < 10; i++) {
+          const col = worksheet.getColumn(monthColStart[`${m.month}`] + i);
+          // h2 (Lingkar Kepala) adalah index 4, set width 50. Lainnya width 14
+          col.width = (i === 4) ? 50 : 14;
+        }
+      });
+
+      // Set row heights
+      worksheet.getRow(1).height = 25;
+      worksheet.getRow(2).height = 30;
+
+      // Add border to header rows
+      for (let col = 1; col < colIndex; col++) {
+        worksheet.getCell(1, col).border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+        worksheet.getCell(2, col).border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      }
+
+      // Sort balita by name, then add data rows
+      const sortedBalita = balitaList.sort((a, b) => 
+        (a.nama_lengkap || '').localeCompare(b.nama_lengkap || '')
+      );
+
+      let rowNum = 3;
+      sortedBalita.forEach((balita, idx) => {
+        // Fixed columns
+        worksheet.getCell(rowNum, colMapping['no']).value = idx + 1;
+        worksheet.getCell(rowNum, colMapping['nama']).value = balita.nama_lengkap || '-';
+        worksheet.getCell(rowNum, colMapping['nik']).value = balita.nik || '-';
+        worksheet.getCell(rowNum, colMapping['jk']).value = getJenisKelaminLabel(balita.jenis_kelamin);
+
+        // Get pengukuran untuk balita ini, sorted by tanggal (oldest first)
+        const balitaPengukuran = (pengukuranByBalita[balita.id] || []).sort((a, b) => 
+          new Date(a.tanggal_pengukuran) - new Date(b.tanggal_pengukuran)
+        );
+
+        // Add pengukuran data per bulan
+        monthsList.forEach(m => {
+          const monthPengukuran = balitaPengukuran.find(p => {
+            const pDate = new Date(p.tanggal_pengukuran);
+            return pDate.getMonth() + 1 === m.month && pDate.getFullYear() === m.year;
+          });
+
+          const colStart = monthColStart[`${m.month}`];
+          
+          if (monthPengukuran) {
+            // Usia
+            worksheet.getCell(rowNum, colStart).value = monthPengukuran.usia_bulan || '-';
+            // TB
+            worksheet.getCell(rowNum, colStart + 1).value = formatNumber(monthPengukuran.tinggi_badan, 1);
+            // BB
+            worksheet.getCell(rowNum, colStart + 2).value = formatNumber(monthPengukuran.berat_badan, 2);
+            // Lingkar Lengan
+            worksheet.getCell(rowNum, colStart + 3).value = formatNumber(monthPengukuran.lingkar_lengan, 1) || 'absen';
+            // Lingkar Kepala
+            worksheet.getCell(rowNum, colStart + 4).value = formatNumber(monthPengukuran.lingkar_kepala, 1) || 'absen';
+            // Z-Score BB
+            worksheet.getCell(rowNum, colStart + 5).value = formatNumber(monthPengukuran.zscore_bbu, 2) || '-';
+            // Z-Score TB
+            worksheet.getCell(rowNum, colStart + 6).value = formatNumber(monthPengukuran.zscore_tbu, 2) || '-';
+            // Status Gizi
+            worksheet.getCell(rowNum, colStart + 7).value = monthPengukuran.status_gizi || '-';
+            // Status Gizi Aktual
+            const actualStatus = calculateActualNutritionStatus(monthPengukuran);
+            worksheet.getCell(rowNum, colStart + 8).value = actualStatus;
+            // Validasi Status
+            const validation = validateNutritionStatus(monthPengukuran.status_gizi, actualStatus);
+            worksheet.getCell(rowNum, colStart + 9).value = validation;
+          } else {
+            // Kosongkan sel jika tidak ada pengukuran di bulan tersebut
+            for (let i = 0; i < 10; i++) {
+              worksheet.getCell(rowNum, colStart + i).value = '-';
+            }
+          }
+        });
+
+        // Add borders to all cells in this row
+        for (let col = 1; col < colIndex; col++) {
+          const cell = worksheet.getCell(rowNum, col);
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+
+        rowNum++;
+      });
+    };
+
+    // Create sheets
+    const posyanduNames = posyanduList
+      .filter(p => posyanduGroups[p.id] && posyanduGroups[p.id].length > 0)
+      .sort((a, b) => a.nama.localeCompare(b.nama));
+
+    if (period === 'bulanan') {
+      // Untuk bulanan: 1 sheet dengan semua posyandu
+      const worksheet = workbook.addWorksheet('Laporan Bulanan');
+      
+      let colIndex = 1;
+      worksheet.getCell(1, colIndex).value = 'No';
+      colIndex++;
+      
+      worksheet.getCell(1, colIndex).value = 'Posyandu';
+      colIndex++;
+      
+      worksheet.getCell(1, colIndex).value = 'Nama Balita';
+      colIndex++;
+      
+      worksheet.getCell(1, colIndex).value = 'NIK';
+      colIndex++;
+      
+      worksheet.getCell(1, colIndex).value = 'Jenis Kelamin';
+      colIndex++;
+
+      const subHeaders = ['Usia (bulan)', 'TB (cm)', 'BB (kg)', 'Lingkar Lengan (cm)', 'Lingkar Kepala (cm)', 'Z-Score BB', 'Z-Score TB', 'Status Gizi', 'Status Gizi Aktual', 'Validasi Status'];
+      subHeaders.forEach(header => {
+        worksheet.getCell(1, colIndex).value = header;
+        colIndex++;
+      });
+
+      // Style header
+      worksheet.getRow(1).font = { bold: true, size: 11 };
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0284C7' },
+      };
+      worksheet.getRow(1).font = { ...worksheet.getRow(1).font, color: { argb: 'FFFFFFFF' } };
+
+      // Set widths
+      worksheet.getColumn(1).width = 5;
+      worksheet.getColumn(2).width = 25;
+      worksheet.getColumn(3).width = 25;
+      worksheet.getColumn(4).width = 18;
+      worksheet.getColumn(5).width = 15;
+      for (let i = 6; i < colIndex; i++) {
+        // h2 (Lingkar Kepala) adalah column 10, set width 50. Lainnya width 14
+        worksheet.getColumn(i).width = (i === 10) ? 50 : 14;
+      }
+
+      // Add data
+      let rowNum = 2;
+      let dataNum = 1;
+      posyanduNames.forEach(posyandu => {
+        const balitaList = balitaByPosyandu[posyandu.id] || [];
+        const sortedBalita = balitaList.sort((a, b) => 
+          (a.nama_lengkap || '').localeCompare(b.nama_lengkap || '')
+        );
+
+        const pengukuranByBalita = {};
+        (posyanduGroups[posyandu.id] || []).forEach(p => {
+          if (!pengukuranByBalita[p.balita_id]) {
+            pengukuranByBalita[p.balita_id] = [];
+          }
+          pengukuranByBalita[p.balita_id].push(p);
+        });
+
+        sortedBalita.forEach(balita => {
+          const balitaPengukuran = (pengukuranByBalita[balita.id] || [])
+            .sort((a, b) => new Date(a.tanggal_pengukuran) - new Date(b.tanggal_pengukuran))[0];
+
+          if (balitaPengukuran) {
+            worksheet.getCell(rowNum, 1).value = dataNum++;
+            worksheet.getCell(rowNum, 2).value = posyandu.nama;
+            worksheet.getCell(rowNum, 3).value = balita.nama_lengkap || '-';
+            worksheet.getCell(rowNum, 4).value = balita.nik || '-';
+            worksheet.getCell(rowNum, 5).value = getJenisKelaminLabel(balita.jenis_kelamin);
+            worksheet.getCell(rowNum, 6).value = balitaPengukuran.usia_bulan || '-';
+            worksheet.getCell(rowNum, 7).value = formatNumber(balitaPengukuran.tinggi_badan, 1);
+            worksheet.getCell(rowNum, 8).value = formatNumber(balitaPengukuran.berat_badan, 2);
+            worksheet.getCell(rowNum, 9).value = formatNumber(balitaPengukuran.lingkar_lengan, 1) || 'absen';
+            worksheet.getCell(rowNum, 10).value = formatNumber(balitaPengukuran.lingkar_kepala, 1) || 'absen';
+            worksheet.getCell(rowNum, 11).value = formatNumber(balitaPengukuran.zscore_bbu, 2) || '-';
+            worksheet.getCell(rowNum, 12).value = formatNumber(balitaPengukuran.zscore_tbu, 2) || '-';
+            worksheet.getCell(rowNum, 13).value = balitaPengukuran.status_gizi || '-';
+            const actualStatus = calculateActualNutritionStatus(balitaPengukuran);
+            worksheet.getCell(rowNum, 14).value = actualStatus;
+            const validation = validateNutritionStatus(balitaPengukuran.status_gizi, actualStatus);
+            worksheet.getCell(rowNum, 15).value = validation;
+
+            // Add borders
+            for (let col = 1; col <= 15; col++) {
+              worksheet.getCell(rowNum, col).border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' },
+              };
+              worksheet.getCell(rowNum, col).alignment = { horizontal: 'center', vertical: 'middle' };
+            }
+
+            rowNum++;
+          }
+        });
+      });
+    } else {
+      // Untuk H1 dan H2: 1 sheet per posyandu
+      posyanduNames.forEach(posyandu => {
+        const balitaList = balitaByPosyandu[posyandu.id] || [];
+        
+        const pengukuranByBalita = {};
+        (posyanduGroups[posyandu.id] || []).forEach(p => {
+          if (!pengukuranByBalita[p.balita_id]) {
+            pengukuranByBalita[p.balita_id] = [];
+          }
+          pengukuranByBalita[p.balita_id].push(p);
+        });
+
+        createPosyanduSheet(posyandu.nama, balitaList, pengukuranByBalita);
+      });
+    }
+
+    // Generate file
+    const filename = `laporan_pengukuran_${periodLabel}`;
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `${filename}.xlsx`);
+    
+    return { success: true, message: `Laporan ${period} berhasil dibuat` };
+  } catch (error) {
+    console.error('Error exporting laporan:', error);
+    throw new Error('Gagal membuat laporan Excel: ' + error.message);
+  }
+};
+
+// Export alias for backward compatibility
+export const exportLaporanByPeriod = exportLaporanPengukuranByPeriod;

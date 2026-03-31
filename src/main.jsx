@@ -15,21 +15,46 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         toastOptions={{
           duration: 3000,
           style: {
-            fontSize: '14px',
-            maxWidth: '90vw',
+            fontSize: '17px',
+            fontWeight: '700',
+            maxWidth: '95vw',
+            padding: '18px 24px',
+            borderRadius: '14px',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.30)',
           },
           success: {
-            duration: 3000,
+            duration: 3500,
+            style: {
+              background: '#15803d',
+              color: '#ffffff',
+              border: '2px solid #166534',
+            },
             iconTheme: {
-              primary: '#22c55e',
-              secondary: '#fff',
+              primary: '#ffffff',
+              secondary: '#15803d',
             },
           },
           error: {
-            duration: 4000,
+            duration: 5000,
+            style: {
+              background: '#dc2626',
+              color: '#ffffff',
+              border: '2px solid #991b1b',
+            },
             iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
+              primary: '#ffffff',
+              secondary: '#dc2626',
+            },
+          },
+          loading: {
+            style: {
+              background: '#1d4ed8',
+              color: '#ffffff',
+              border: '2px solid #1e40af',
+            },
+            iconTheme: {
+              primary: '#ffffff',
+              secondary: '#1d4ed8',
             },
           },
         }}

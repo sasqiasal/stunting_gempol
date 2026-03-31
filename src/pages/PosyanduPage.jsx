@@ -22,9 +22,7 @@ const PosyanduPage = () => {
     alamat: "",
     kelurahan: "",
     kecamatan: "",
-    kader_penanggungjawab: "",
   });
-  const [viewMode, setViewMode] = useState("cards"); // 'cards' or 'table'
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
@@ -61,29 +59,44 @@ const PosyanduPage = () => {
     }
   };
 
+  const handleAddClick = () => {
+    setSelectedPosyandu(null);
+    setEditForm({
+      nama: "",
+      alamat: "",
+      kelurahan: "Gempol",
+      kecamatan: "Gempol",
+    });
+    setShowEditModal(true);
+  };
+
   const handleEditClick = (posyandu) => {
+
     setSelectedPosyandu(posyandu);
     setEditForm({
       nama: posyandu.nama,
       alamat: posyandu.alamat,
       kelurahan: posyandu.kelurahan || "Gempol",
       kecamatan: posyandu.kecamatan || "Gempol",
-      kader_penanggungjawab: posyandu.kader_penanggungjawab || "",
     });
     setShowEditModal(true);
   };
 
   const handleUpdatePosyandu = async (e) => {
     e.preventDefault();
-    
     try {
-      await posyanduService.update(selectedPosyandu.id, editForm);
-      toast.success("Data posyandu berhasil diupdate");
+      if (selectedPosyandu) {
+        await posyanduService.update(selectedPosyandu.id, editForm);
+        toast.success("Data posyandu berhasil diupdate");
+      } else {
+        await posyanduService.create(editForm);
+        toast.success("Data posyandu berhasil ditambahkan");
+      }
       setShowEditModal(false);
       loadPosyandu();
     } catch (error) {
-      console.error("Error updating posyandu:", error);
-      toast.error("Gagal update data posyandu");
+      console.error("Error saving posyandu:", error);
+      toast.error("Gagal menyimpan data posyandu");
     }
   };
 
@@ -115,34 +128,6 @@ const PosyanduPage = () => {
         {/* Main Content */}
         <main className="flex-1 overflow-auto">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {/* View Mode Toggle */}
-            <div className="flex justify-end mb-4">
-              <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
-                <button
-                  onClick={() => setViewMode("cards")}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    viewMode === "cards" ? "bg-primary-600 text-white" : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  <svg className="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                  </svg>
-                  Cards
-                </button>
-                <button
-                  onClick={() => setViewMode("table")}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    viewMode === "table" ? "bg-primary-600 text-white" : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  <svg className="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Tabel
-                </button>
-              </div>
-            </div>
-
             {loading ? (
               <div className="text-center py-12">
                 <div className="spinner mx-auto"></div>
@@ -150,135 +135,21 @@ const PosyanduPage = () => {
               </div>
             ) : posyanduList.length === 0 ? (
               <div className="text-center py-12 text-gray-500">Belum ada data posyandu</div>
-            ) : viewMode === "table" ? (
-              // Table View
-              <>
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Posyandu</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lokasi</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ketua Kader</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Akun</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Jumlah Balita</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {posyanduList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((posyandu, index) => {
-                          const kader = kaderList.find((k) => k.posyandu_id === posyandu.id);
-                          return (
-                            <tr key={posyandu.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="font-medium text-gray-900">{posyandu.nama}</div>
-                              </td>
-                              <td className="px-6 py-4 text-sm text-gray-600">{posyandu.alamat}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{posyandu.kader_penanggungjawab || "-"}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                {kader ? (
-                                  <div>
-                                    <div className="font-medium text-gray-900">{kader.nama_lengkap}</div>
-                                    <div className="text-xs text-gray-500">{kader.email}</div>
-                                  </div>
-                                ) : (
-                                  <span className="text-gray-400 italic">Belum ditugaskan</span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                <span className="font-bold text-blue-600">{posyandu.jumlah_balita || 0}</span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <button
-                                  onClick={() => handleEditClick(posyandu)}
-                                  className="text-primary-600 hover:text-primary-900 font-medium"
-                                >
-                                  Kelola
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Pagination */}
-                {posyanduList.length > itemsPerPage && (
-                  <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 rounded-b-lg">
-                    <div className="flex-1 flex justify-between sm:hidden">
-                      <button
-                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                        disabled={currentPage === 1}
-                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() => setCurrentPage(Math.min(Math.ceil(posyanduList.length / itemsPerPage), currentPage + 1))}
-                        disabled={currentPage >= Math.ceil(posyanduList.length / itemsPerPage)}
-                        className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Next
-                      </button>
-                    </div>
-                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm text-gray-700">
-                          Menampilkan <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> sampai{" "}
-                          <span className="font-medium">{Math.min(currentPage * itemsPerPage, posyanduList.length)}</span> dari{" "}
-                          <span className="font-medium">{posyanduList.length}</span> hasil
-                        </p>
-                      </div>
-                      <div>
-                        <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                          <button
-                            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                            disabled={currentPage === 1}
-                            className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                          >
-                            <span className="sr-only">Previous</span>
-                            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </button>
-                          {[...Array(Math.ceil(posyanduList.length / itemsPerPage))].map((_, i) => (
-                            <button
-                              key={i}
-                              onClick={() => setCurrentPage(i + 1)}
-                              className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                                currentPage === i + 1
-                                  ? "z-10 bg-primary-50 border-primary-500 text-primary-600"
-                                  : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
-                              }`}
-                            >
-                              {i + 1}
-                            </button>
-                          ))}
-                          <button
-                            onClick={() => setCurrentPage(Math.min(Math.ceil(posyanduList.length / itemsPerPage), currentPage + 1))}
-                            disabled={currentPage >= Math.ceil(posyanduList.length / itemsPerPage)}
-                            className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                          >
-                            <span className="sr-only">Next</span>
-                            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </button>
-                        </nav>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
             ) : (
-              // Cards View
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                  {/* Card Tambah Posyandu */}
+                  <div 
+                    onClick={() => handleAddClick()}
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-gray-500 hover:text-primary-600 hover:border-primary-500 hover:bg-primary-50 transition-colors cursor-pointer min-h-[250px]"
+                  >
+                    <svg className="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span className="font-medium">Tambah Posyandu</span>
+                  </div>
+
                   {posyanduList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((posyandu) => {
                     // Find kader for this posyandu
                     const kader = kaderList.find((k) => k.posyandu_id === posyandu.id);
@@ -421,7 +292,7 @@ const PosyanduPage = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-900">Kelola Unit Posyandu</h2>
+                <h2 className="text-xl font-bold text-gray-900">{selectedPosyandu ? "Kelola Unit Posyandu" : "Tambah Posyandu Baru"}</h2>
                 <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 transition-colors">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -474,18 +345,6 @@ const PosyanduPage = () => {
                     value={editForm.kecamatan}
                     onChange={(e) => setEditForm({ ...editForm, kecamatan: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                </div>
-
-                {/* Ketua Kader */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Ketua Kader / Penanggung Jawab</label>
-                  <input
-                    type="text"
-                    value={editForm.kader_penanggungjawab}
-                    onChange={(e) => setEditForm({ ...editForm, kader_penanggungjawab: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    placeholder="Nama ketua kader"
                   />
                 </div>
 

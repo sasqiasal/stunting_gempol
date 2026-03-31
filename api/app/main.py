@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
-from app.routes import auth, balita, pengukuran, posyandu, evaluasi, akun
+from app.routes import auth, balita, pengukuran, posyandu, evaluasi, akun, k_parameter_evaluation, knn_kader_evaluation, knn_global_evaluation
+# from app.routes import laporan  # Disabled: SQLAlchemy incompatibility with Python 3.13
 from app.ml.knn_model import knn_model
 import os
 
@@ -34,6 +35,10 @@ app.include_router(pengukuran.router, prefix="/api/v1", tags=["Pengukuran & Pred
 app.include_router(posyandu.router, prefix="/api/v1", tags=["Posyandu"])
 app.include_router(evaluasi.router, prefix="/api/v1", tags=["Evaluasi Model"])
 app.include_router(akun.router, prefix="/api/v1", tags=["Manajemen Akun"])
+# app.include_router(laporan.router, prefix="/api/v1", tags=["Laporan Export"])  # Disabled: SQLAlchemy incompatibility
+app.include_router(k_parameter_evaluation.router)
+app.include_router(knn_kader_evaluation.router)
+app.include_router(knn_global_evaluation.router)
 
 @app.on_event("startup")
 async def startup_event():

@@ -19,7 +19,6 @@ router = APIRouter(prefix="/pengukuran", tags=["Pengukuran"])
 @router.get("/statistik/summary")
 async def get_statistik_summary(
     posyandu_id: Optional[int] = None,
-    current_user: dict = Depends(get_current_user),
     supabase_client = Depends(get_supabase)
 ):
     """
@@ -29,16 +28,9 @@ async def get_statistik_summary(
         # 1. Total Balita
         query_balita = supabase_client.table("balita").select("id", count="exact")
         
-        # Filter by role or param
-        if current_user["role"] == "kader":
-            # Kader hanya lihat posyandu dia
-            # Perlu ambil posyandu_id dari tabel kader/user? 
-            # Asumsi: posyandu_id dikirim dari frontend atau ambil dari user profile
-            # Untuk simplifikasi, jika param posyandu_id ada, gunakan.
-            if posyandu_id:
-                query_balita = query_balita.eq("posyandu_id", posyandu_id)
-        elif posyandu_id:
-             query_balita = query_balita.eq("posyandu_id", posyandu_id)
+        # Filter by posyandu_id if provided
+        if posyandu_id:
+            query_balita = query_balita.eq("posyandu_id", posyandu_id)
              
         res_balita = query_balita.execute()
         total_balita = res_balita.count or 0
@@ -47,9 +39,7 @@ async def get_statistik_summary(
         query_stunting = supabase_client.table("balita").select("id", count="exact")\
             .ilike("status_terkini", "%stunt%")
             
-        if current_user["role"] == "kader" and posyandu_id:
-            query_stunting = query_stunting.eq("posyandu_id", posyandu_id)
-        elif posyandu_id:
+        if posyandu_id:
             query_stunting = query_stunting.eq("posyandu_id", posyandu_id)
             
         res_stunting = query_stunting.execute()
@@ -100,7 +90,6 @@ async def get_statistik_summary(
 
 @router.get("/riwayat-stunting")
 async def get_riwayat_stunting(
-    current_user: dict = Depends(get_current_user),
     supabase_client = Depends(get_supabase)
 ):
     """
@@ -121,9 +110,7 @@ async def get_riwayat_stunting(
         response = query.execute()
         data = response.data
         
-        # Filter by role (client side filtering for verified POSYANDU)
-        # Jika user kader, filter based on assigned posyandu (implied logic, or pass param)
-        # Disini kita fetch all dulu lalu group
+        # Return all data (client can filter if needed)
         
         # Group by Month
         stats = {}
@@ -200,12 +187,38 @@ async def create_pengukuran(
     
     balita = balita_response.data[0]
     
-    # 2. Hitung usia saat pengukuran
+    # 2. Validasi tanggal pengukuran (harus dalam 3 bulan + bulan saat ini ke belakang)
+    tgl_ukur = pengukuran_data.tanggal_pengukuran or date.today()
+    today = date.today()
+    
+    # Hitung min date: 3 bulan sebelumnya dari hari pertama bulan saat ini
+    first_day_current_month = today.replace(day=1)
+    min_date = first_day_current_month - timedelta(days=90)  # ~3 bulan
+    min_date = min_date.replace(day=1)  # Set ke hari pertama bulan min
+    
+    # Max date: hari terakhir bulan saat ini
+    if today.month == 12:
+        max_date = date(today.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        max_date = date(today.year, today.month + 1, 1) - timedelta(days=1)
+    
+    if tgl_ukur < min_date or tgl_ukur > max_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tanggal pengukuran harus dalam range {min_date.strftime('%Y-%m-%d')} sampai {max_date.strftime('%Y-%m-%d')} (bulan saat ini + 3 bulan sebelumnya)"
+        )
+    
+    # 3. Hitung usia saat pengukuran
     tanggal_lahir = date.fromisoformat(balita["tanggal_lahir"])
-    usia_bulan = calculate_age_in_months(tanggal_lahir)
+    # Gunakan usia_bulan dari frontend jika ada, atau hitung dari tanggal_lahir
+    if pengukuran_data.usia_bulan is not None:
+        usia_bulan = pengukuran_data.usia_bulan
+    else:
+        # Gunakan tanggal pengukuran yang dikirim (untuk input retroaktif), default hari ini
+        usia_bulan = calculate_age_in_months(tanggal_lahir, tgl_ukur)
     jenis_kelamin = balita["jenis_kelamin"]
     
-    # 3. Prediksi stunting (termasuk kalkulasi Z-Score)
+    # 4. Prediksi stunting (termasuk kalkulasi Z-Score)
     prediksi_result = prediction_service.predict_stunting(
         jenis_kelamin=jenis_kelamin,
         usia_bulan=usia_bulan,
@@ -215,28 +228,41 @@ async def create_pengukuran(
         lingkar_kepala=pengukuran_data.lingkar_kepala
     )
     
-    # 4. Siapkan data untuk disimpan
+    # 5. Siapkan data untuk disimpan
     pengukuran_dict = pengukuran_data.model_dump()
-    pengukuran_dict.update({
-        "kader_id": current_user["id"],
-        "usia_bulan": usia_bulan,
-        "jenis_kelamin": jenis_kelamin,
-        "zscore_bbu": float(prediksi_result["zscore_bbu"]),
-        "zscore_tbu": float(prediksi_result["zscore_tbu"]),
-        "status_gizi": prediksi_result["status_gizi"],
-        "prediksi_stunting": bool(prediksi_result["prediksi_stunting"]),
-        "confidence_score": float(prediksi_result["confidence_score"]),
-        # Gunakan waktu server dengan timezone (aware) agar Supabase menyimpan waktu yang akurat
-        "tanggal_pengukuran": datetime.now().astimezone().isoformat(),
-        "created_at": datetime.now().astimezone().isoformat(),
-        # Simpan detail prediksi (termasuk nearest_neighbors)
-        "detail_prediksi": {
-            "nearest_neighbors": prediksi_result.get("nearest_neighbors", []),
-            "version": "1.0", 
-            "model": "KNN",
-            "k": 5
-        }
-    })
+    
+    try:
+        print(f"DEBUG CREATE: Preparing data for balita {pengukuran_data.balita_id}")
+        print(f"  Prediction result keys: {prediksi_result.keys()}")
+        print(f"  prediksi_stunting type: {type(prediksi_result['prediksi_stunting'])}, value: {prediksi_result['prediksi_stunting']}")
+        
+        prediksi_stunting_bool = int(prediksi_result["prediksi_stunting"]) >= 2
+        print(f"  Converted to boolean: {prediksi_stunting_bool}")
+        
+        pengukuran_dict.update({
+            "kader_id": current_user["id"],
+            "usia_bulan": usia_bulan,
+            "jenis_kelamin": jenis_kelamin,
+            "zscore_bbu": float(prediksi_result["zscore_bbu"]),
+            "zscore_tbu": float(prediksi_result["zscore_tbu"]),
+            "status_gizi": prediksi_result["status_gizi"],
+            "prediksi_stunting": prediksi_stunting_bool,  # Convert to boolean for DB
+            "confidence_score": float(prediksi_result["confidence_score"]),
+            # Gunakan tanggal pengukuran yang dikirim (retroaktif) atau waktu sekarang
+            "tanggal_pengukuran": datetime.combine(tgl_ukur, datetime.min.time()).astimezone().isoformat(),
+            "created_at": datetime.now().astimezone().isoformat(),
+            # Simpan detail prediksi (termasuk nearest_neighbors)
+            "detail_prediksi": {
+                "nearest_neighbors": prediksi_result.get("nearest_neighbors", []),
+                "version": "1.0", 
+                "model": "KNN",
+                "k": 5
+            }
+        })
+        print(f"  Updated dict with all fields")
+    except Exception as e:
+        print(f"ERROR in data preparation: {e}")
+        raise HTTPException(status_code=500, detail=f"Error preparing data: {str(e)}")
     
     # Convert float values to ensure JSON serialization
     for key in ["tinggi_badan", "berat_badan", "lingkar_lengan", "lingkar_kepala"]:
@@ -283,11 +309,17 @@ async def create_pengukuran(
     pengukuran = pengukuran_new
     
     # 6. Update status_terkini di tabel balita
-    supabase_client.table("balita").update({
-        "status_terkini": prediksi_result["status_gizi"],
-        "usia_bulan": usia_bulan
-    }).eq("id", pengukuran_data.balita_id).execute()
+    try:
+        supabase_client.table("balita").update({
+            "status_terkini": prediksi_result["status_gizi"],
+            "usia_bulan": usia_bulan
+        }).eq("id", pengukuran_data.balita_id).execute()
+        print(f"✅ Updated balita status_terkini for balita {pengukuran_data.balita_id}")
+    except Exception as e:
+        print(f"⚠️ Error updating balita: {e}")
+        # Tidak raise error, balita update adalah secondary action
     
+    print(f"✅ Successfully created pengukuran ID {pengukuran_id}")
     return pengukuran
 
 @router.put("/{id}", response_model=PengukuranResponse)
@@ -324,9 +356,9 @@ async def update_pengukuran(
 
     balita = balita_response.data[0]
 
-    # 3. Hitung ulang usia saat pengukuran (berdasarkan tanggal pengukuran asli)
-    tanggal_lahir = date.fromisoformat(balita["tanggal_lahir"])
-    usia_bulan = calculate_age_in_months(tanggal_lahir)
+    # 3. Gunakan usia_bulan yang sudah tersimpan (JANGAN RECALCULATE untuk konsistensi)
+    # Usia_bulan harus tetap sama seperti saat create, agar klasifikasi tetap konsisten
+    usia_bulan = pengukuran_existing["usia_bulan"]
     jenis_kelamin = balita["jenis_kelamin"]
 
     # 4. Prediksi ulang stunting
@@ -350,16 +382,24 @@ async def update_pengukuran(
         "zscore_bbu": float(prediksi_result["zscore_bbu"]),
         "zscore_tbu": float(prediksi_result["zscore_tbu"]),
         "status_gizi": prediksi_result["status_gizi"],
-        "prediksi_stunting": bool(prediksi_result["prediksi_stunting"]),
+        "prediksi_stunting": int(prediksi_result["prediksi_stunting"]) >= 2,  # Convert to boolean for DB
         "confidence_score": float(prediksi_result["confidence_score"]),
     }
 
     try:
+        print(f"DEBUG UPDATE: Updating pengukuran ID {id}")
+        print(f"  prediksi_stunting raw: {prediksi_result['prediksi_stunting']} (type: {type(prediksi_result['prediksi_stunting'])})")
+        print(f"  update_dict keys: {update_dict.keys()}")
+        
         response = supabase_client.table("pengukuran").update(update_dict).eq("id", id).execute()
+        
         if not response.data:
+            print(f"ERROR UPDATE: No data returned from update. Response: {response}")
             raise HTTPException(status_code=500, detail="Gagal mengupdate data pengukuran")
 
         updated_pengukuran = response.data[0]
+        print(f"✅ Update successful for ID {id}")
+        print(f"  Returned fields: {updated_pengukuran.keys() if isinstance(updated_pengukuran, dict) else 'not a dict'}")
 
         # 6. Update atau insert ke tabel evaluasi_model_knn
         evaluasi_data = {
@@ -449,7 +489,7 @@ async def get_detail_evaluasi(
 @router.get("/", response_model=List[PengukuranWithBalita])
 async def get_all_pengukuran(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=99999),
     balita_id: Optional[int] = None,
     posyandu_id: Optional[int] = None,
     prediksi_stunting: Optional[bool] = None,
@@ -501,8 +541,9 @@ async def get_all_pengukuran(
             except (ValueError, IndexError) as e:
                 print(f"⚠️ Invalid bulan format: {bulan}, ignoring filter")
         
-        # Pagination
-        query = query.range(skip, skip + limit - 1).order("tanggal_pengukuran", desc=True)
+        # Pagination & Ordering
+        # Sort by: 1) tanggal_pengukuran DESC, 2) created_at DESC (untuk data same-day)
+        query = query.range(skip, skip + limit - 1).order("tanggal_pengukuran", desc=True).order("created_at", desc=True)
         
         response = query.execute()
         print(f"✅ Query executed successfully, got {len(response.data)} records")
@@ -514,9 +555,17 @@ async def get_all_pengukuran(
             
             # Flatten data balita
             if "balita" in item and item["balita"]:
-                result["balita_nama"] = item["balita"].get("nama_lengkap")
-                result["balita_nik"] = item["balita"].get("nik")
+                result["balita_nama"] = item["balita"].get("nama_lengkap") or "-"
+                result["balita_nik"] = item["balita"].get("nik") or "-"
                 result["posyandu_id"] = item["balita"].get("posyandu_id")
+                
+                # Fetch posyandu nama if possible
+                if "posyandu" in item and item["posyandu"] and "posyandu" in item["posyandu"]:
+                    if isinstance(item["posyandu"]["posyandu"], dict):
+                        result["posyandu_nama"] = item["posyandu"]["posyandu"].get("nama")
+            else:
+                result["balita_nama"] = "-"
+                result["balita_nik"] = "-"
             
             results.append(result)
         

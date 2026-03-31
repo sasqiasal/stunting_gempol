@@ -1,0 +1,115 @@
+{
+  "accuracy": 0.92,
+  "accuracy_percentage": 92.0,
+  "macro_avg_precision": 0.9048,
+  "macro_avg_precision_percentage": 90.48,
+  "macro_avg_recall": 0.9048,
+  "macro_avg_recall_percentage": 90.48,
+  "macro_avg_f1": 0.9048,
+  "macro_avg_f1_percentage": 90.48,
+  "k_value_used": 5,
+  "test_set_size": 100,
+  "training_set_size": 400,
+  "confusion_matrix_raw": [
+    [
+      31,
+      4,
+      0,
+      0
+    ],
+    [
+      4,
+      11,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      25,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      25
+    ]
+  ],
+  "per_class_metrics": [
+    {
+      "class_idx": 0,
+      "class_name": "Normal + Gizi Baik",
+      "tp": 31,
+      "fp": 4,
+      "fn": 4,
+      "tn": 61,
+      "precision": 0.8857,
+      "recall": 0.8857,
+      "f1_score": 0.8857
+    },
+    {
+      "class_idx": 1,
+      "class_name": "Normal + Kurang Gizi",
+      "tp": 11,
+      "fp": 4,
+      "fn": 4,
+      "tn": 81,
+      "precision": 0.7333,
+      "recall": 0.7333,
+      "f1_score": 0.7333
+    },
+    {
+      "class_idx": 2,
+      "class_name": "Stunting + Gizi Baik",
+      "tp": 25,
+      "fp": 0,
+      "fn": 0,
+      "tn": 75,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    },
+    {
+      "class_idx": 3,
+      "class_name": "Stunting + Kurang Gizi",
+      "tp": 25,
+      "fp": 0,
+      "fn": 0,
+      "tn": 75,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    }
+  ],
+  "k_comparisons": [
+    {
+      "k": 3,
+      "accuracy": 0.95,
+      "precision": 0.9557,
+      "recall": 0.95,
+      "f1_score": 0.9512
+    },
+    {
+      "k": 5,
+      "accuracy": 0.92,
+      "precision": 0.92,
+      "recall": 0.92,
+      "f1_score": 0.92
+    },
+    {
+      "k": 7,
+      "accuracy": 0.96,
+      "precision": 0.9684,
+      "recall": 0.96,
+      "f1_score": 0.9611
+    },
+    {
+      "k": 9,
+      "accuracy": 0.96,
+      "precision": 0.9629,
+      "recall": 0.96,
+      "f1_score": 0.9607
+    }
+  ]
+}

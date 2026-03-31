@@ -7,6 +7,7 @@ import PengukuranPage from './pages/PengukuranPage';
 import BalitaPage from './pages/BalitaPage';
 import PosyanduPage from './pages/PosyanduPage';
 import EvaluasiModelPage from './pages/EvaluasiModelPage';
+import EvaluasiGlobalPage from './pages/EvaluasiGlobalPage';
 import AkunPage from './pages/AkunPage';
 
 // Protected Route Component
@@ -89,6 +90,15 @@ function App() {
             <ProtectedRoute>
               <EvaluasiModelPage />
             </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/evaluasi-global"
+          element={
+            <AdminRoute>
+              <EvaluasiGlobalPage />
+            </AdminRoute>
           }
         />
         

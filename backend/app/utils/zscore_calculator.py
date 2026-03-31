@@ -17,139 +17,315 @@ from typing import Literal, Tuple
 WHO_WFA_BOYS = {
     0: {"L": 0.3487, "M": 3.3464, "S": 0.14602},
     1: {"L": 0.2297, "M": 4.4709, "S": 0.13395},
-    2: {"L": 0.1970, "M": 5.5675, "S": 0.12385},
+    2: {"L": 0.197, "M": 5.5675, "S": 0.12385},
     3: {"L": 0.1738, "M": 6.3762, "S": 0.11727},
     4: {"L": 0.1553, "M": 7.0023, "S": 0.11316},
-    5: {"L": 0.1395, "M": 7.5105, "S": 0.11080},
-    6: {"L": 0.1257, "M": 7.9340, "S": 0.10958},
-    12: {"L": 0.0449, "M": 9.6479, "S": 0.10930},
-    18: {"L": -0.0131, "M": 10.9049, "S": 0.11035},
-    24: {"L": -0.0604, "M": 12.0458, "S": 0.11327},
-    36: {"L": -0.1349, "M": 14.0196, "S": 0.12158},
-    48: {"L": -0.1845, "M": 15.7517, "S": 0.13032},
-    60: {"L": -0.2176, "M": 17.4182, "S": 0.13647},
+    5: {"L": 0.1395, "M": 7.5105, "S": 0.1108},
+    6: {"L": 0.1257, "M": 7.934, "S": 0.10958},
+    7: {"L": 0.1134, "M": 8.297, "S": 0.10902},
+    8: {"L": 0.1021, "M": 8.6151, "S": 0.10882},
+    9: {"L": 0.0917, "M": 8.9014, "S": 0.10881},
+    10: {"L": 0.082, "M": 9.1649, "S": 0.10891},
+    11: {"L": 0.073, "M": 9.4122, "S": 0.10906},
+    12: {"L": 0.0644, "M": 9.6479, "S": 0.10925},
+    13: {"L": 0.0563, "M": 9.8749, "S": 0.10949},
+    14: {"L": 0.0487, "M": 10.0953, "S": 0.10976},
+    15: {"L": 0.0413, "M": 10.3108, "S": 0.11007},
+    16: {"L": 0.0343, "M": 10.5228, "S": 0.11041},
+    17: {"L": 0.0275, "M": 10.7319, "S": 0.11079},
+    18: {"L": 0.0211, "M": 10.9385, "S": 0.11119},
+    19: {"L": 0.0148, "M": 11.143, "S": 0.11164},
+    20: {"L": 0.0087, "M": 11.3462, "S": 0.11211},
+    21: {"L": 0.0029, "M": 11.5486, "S": 0.11261},
+    22: {"L": -0.0028, "M": 11.7504, "S": 0.11314},
+    23: {"L": -0.0083, "M": 11.9514, "S": 0.11369},
+    24: {"L": -0.0137, "M": 12.1515, "S": 0.11426},
+    25: {"L": -0.0189, "M": 12.3502, "S": 0.11485},
+    26: {"L": -0.024, "M": 12.5466, "S": 0.11544},
+    27: {"L": -0.0289, "M": 12.7401, "S": 0.11604},
+    28: {"L": -0.0337, "M": 12.9303, "S": 0.11664},
+    29: {"L": -0.0385, "M": 13.1169, "S": 0.11723},
+    30: {"L": -0.0431, "M": 13.3, "S": 0.11781},
+    31: {"L": -0.0476, "M": 13.4798, "S": 0.11839},
+    32: {"L": -0.052, "M": 13.6567, "S": 0.11896},
+    33: {"L": -0.0564, "M": 13.8309, "S": 0.11953},
+    34: {"L": -0.0606, "M": 14.0031, "S": 0.12008},
+    35: {"L": -0.0648, "M": 14.1736, "S": 0.12062},
+    36: {"L": -0.0689, "M": 14.3429, "S": 0.12116},
+    37: {"L": -0.0729, "M": 14.5113, "S": 0.12168},
+    38: {"L": -0.0769, "M": 14.6791, "S": 0.1222},
+    39: {"L": -0.0808, "M": 14.8466, "S": 0.12271},
+    40: {"L": -0.0846, "M": 15.014, "S": 0.12322},
+    41: {"L": -0.0883, "M": 15.1813, "S": 0.12373},
+    42: {"L": -0.092, "M": 15.3486, "S": 0.12425},
+    43: {"L": -0.0957, "M": 15.5158, "S": 0.12478},
+    44: {"L": -0.0993, "M": 15.6828, "S": 0.12531},
+    45: {"L": -0.1028, "M": 15.8497, "S": 0.12586},
+    46: {"L": -0.1063, "M": 16.0163, "S": 0.12643},
+    47: {"L": -0.1097, "M": 16.1827, "S": 0.127},
+    48: {"L": -0.1131, "M": 16.3489, "S": 0.12759},
+    49: {"L": -0.1165, "M": 16.515, "S": 0.12819},
+    50: {"L": -0.1198, "M": 16.6811, "S": 0.1288},
+    51: {"L": -0.123, "M": 16.8471, "S": 0.12943},
+    52: {"L": -0.1262, "M": 17.0132, "S": 0.13005},
+    53: {"L": -0.1294, "M": 17.1792, "S": 0.13069},
+    54: {"L": -0.1325, "M": 17.3452, "S": 0.13133},
+    55: {"L": -0.1356, "M": 17.5111, "S": 0.13197},
+    56: {"L": -0.1387, "M": 17.6768, "S": 0.13261},
+    57: {"L": -0.1417, "M": 17.8422, "S": 0.13325},
+    58: {"L": -0.1447, "M": 18.0073, "S": 0.13389},
+    59: {"L": -0.1477, "M": 18.1722, "S": 0.13453},
+    60: {"L": -0.1506, "M": 18.3366, "S": 0.13517}
 }
 
 WHO_WFA_GIRLS = {
     0: {"L": 0.3809, "M": 3.2322, "S": 0.14171},
     1: {"L": 0.1714, "M": 4.1873, "S": 0.13724},
-    2: {"L": 0.0962, "M": 5.1282, "S": 0.13000},
+    2: {"L": 0.0962, "M": 5.1282, "S": 0.13},
     3: {"L": 0.0402, "M": 5.8458, "S": 0.12619},
-    4: {"L": -0.0050, "M": 6.4237, "S": 0.12402},
-    5: {"L": -0.0430, "M": 6.8985, "S": 0.12274},
-    6: {"L": -0.0756, "M": 7.2970, "S": 0.12204},
-    12: {"L": -0.1749, "M": 8.9481, "S": 0.12137},
-    18: {"L": -0.2267, "M": 10.2297, "S": 0.12306},
-    24: {"L": -0.2612, "M": 11.3479, "S": 0.12626},
-    36: {"L": -0.3071, "M": 13.2737, "S": 0.13573},
-    48: {"L": -0.3306, "M": 14.9462, "S": 0.14522},
-    60: {"L": -0.3449, "M": 16.6380, "S": 0.15251},
+    4: {"L": -0.005, "M": 6.4237, "S": 0.12402},
+    5: {"L": -0.043, "M": 6.8985, "S": 0.12274},
+    6: {"L": -0.0756, "M": 7.297, "S": 0.12204},
+    7: {"L": -0.1039, "M": 7.6422, "S": 0.12178},
+    8: {"L": -0.1288, "M": 7.9487, "S": 0.12181},
+    9: {"L": -0.1507, "M": 8.2254, "S": 0.12199},
+    10: {"L": -0.17, "M": 8.48, "S": 0.12223},
+    11: {"L": -0.1872, "M": 8.7192, "S": 0.12247},
+    12: {"L": -0.2024, "M": 8.9481, "S": 0.12268},
+    13: {"L": -0.2158, "M": 9.1699, "S": 0.12283},
+    14: {"L": -0.2278, "M": 9.387, "S": 0.12294},
+    15: {"L": -0.2384, "M": 9.6008, "S": 0.12299},
+    16: {"L": -0.2478, "M": 9.8124, "S": 0.12303},
+    17: {"L": -0.2562, "M": 10.0226, "S": 0.12306},
+    18: {"L": -0.2637, "M": 10.2315, "S": 0.12309},
+    19: {"L": -0.2703, "M": 10.4393, "S": 0.12315},
+    20: {"L": -0.2762, "M": 10.6464, "S": 0.12323},
+    21: {"L": -0.2815, "M": 10.8534, "S": 0.12335},
+    22: {"L": -0.2862, "M": 11.0608, "S": 0.1235},
+    23: {"L": -0.2903, "M": 11.2688, "S": 0.12369},
+    24: {"L": -0.2941, "M": 11.4775, "S": 0.1239},
+    25: {"L": -0.2975, "M": 11.6864, "S": 0.12414},
+    26: {"L": -0.3005, "M": 11.8947, "S": 0.12441},
+    27: {"L": -0.3032, "M": 12.1015, "S": 0.12472},
+    28: {"L": -0.3057, "M": 12.3059, "S": 0.12506},
+    29: {"L": -0.308, "M": 12.5073, "S": 0.12545},
+    30: {"L": -0.3101, "M": 12.7055, "S": 0.12587},
+    31: {"L": -0.312, "M": 12.9006, "S": 0.12633},
+    32: {"L": -0.3138, "M": 13.093, "S": 0.12683},
+    33: {"L": -0.3155, "M": 13.2837, "S": 0.12737},
+    34: {"L": -0.3171, "M": 13.4731, "S": 0.12794},
+    35: {"L": -0.3186, "M": 13.6618, "S": 0.12855},
+    36: {"L": -0.3201, "M": 13.8503, "S": 0.12919},
+    37: {"L": -0.3216, "M": 14.0385, "S": 0.12988},
+    38: {"L": -0.323, "M": 14.2265, "S": 0.13059},
+    39: {"L": -0.3243, "M": 14.414, "S": 0.13135},
+    40: {"L": -0.3257, "M": 14.601, "S": 0.13213},
+    41: {"L": -0.327, "M": 14.7873, "S": 0.13293},
+    42: {"L": -0.3283, "M": 14.9727, "S": 0.13376},
+    43: {"L": -0.3296, "M": 15.1573, "S": 0.1346},
+    44: {"L": -0.3309, "M": 15.341, "S": 0.13545},
+    45: {"L": -0.3322, "M": 15.524, "S": 0.1363},
+    46: {"L": -0.3335, "M": 15.7064, "S": 0.13716},
+    47: {"L": -0.3348, "M": 15.8882, "S": 0.138},
+    48: {"L": -0.3361, "M": 16.0697, "S": 0.13884},
+    49: {"L": -0.3374, "M": 16.2511, "S": 0.13968},
+    50: {"L": -0.3387, "M": 16.4322, "S": 0.14051},
+    51: {"L": -0.34, "M": 16.6133, "S": 0.14132},
+    52: {"L": -0.3414, "M": 16.7942, "S": 0.14213},
+    53: {"L": -0.3427, "M": 16.9748, "S": 0.14293},
+    54: {"L": -0.344, "M": 17.1551, "S": 0.14371},
+    55: {"L": -0.3453, "M": 17.3347, "S": 0.14448},
+    56: {"L": -0.3466, "M": 17.5136, "S": 0.14525},
+    57: {"L": -0.3479, "M": 17.6916, "S": 0.146},
+    58: {"L": -0.3492, "M": 17.8686, "S": 0.14675},
+    59: {"L": -0.3505, "M": 18.0445, "S": 0.14748},
+    60: {"L": -0.3518, "M": 18.2193, "S": 0.14821}
 }
 
 # Data standar WHO untuk TB/U (Tinggi Badan per Usia) dalam bulan 0-60
-WHO_HFA_BOYS = {
-    0: {"L": 1, "M": 49.8842, "S": 0.03795},
-    1: {"L": 1, "M": 54.7244, "S": 0.03557},
-    2: {"L": 1, "M": 58.4249, "S": 0.03424},
-    3: {"L": 1, "M": 61.4292, "S": 0.03328},
-    4: {"L": 1, "M": 63.8856, "S": 0.03257},
-    5: {"L": 1, "M": 65.9026, "S": 0.03199},
-    6: {"L": 1, "M": 67.6236, "S": 0.03145},
-    12: {"L": 1, "M": 75.7488, "S": 0.02950},
-    18: {"L": 1, "M": 82.2988, "S": 0.02854},
-    24: {"L": 1, "M": 87.0756, "S": 0.02807},
-    36: {"L": 1, "M": 95.7790, "S": 0.02806},
-    48: {"L": 1, "M": 103.0282, "S": 0.02881},
-    60: {"L": 1, "M": 109.1732, "S": 0.02992},
+
+WHO_HFA_LENGTH_BOYS = {
+    0: {"L": 1.0, "M": 49.8842, "S": 0.03795},
+    1: {"L": 1.0, "M": 54.7244, "S": 0.03557},
+    2: {"L": 1.0, "M": 58.4249, "S": 0.03424},
+    3: {"L": 1.0, "M": 61.4292, "S": 0.03328},
+    4: {"L": 1.0, "M": 63.886, "S": 0.03257},
+    5: {"L": 1.0, "M": 65.9026, "S": 0.03204},
+    6: {"L": 1.0, "M": 67.6236, "S": 0.03165},
+    7: {"L": 1.0, "M": 69.1645, "S": 0.03139},
+    8: {"L": 1.0, "M": 70.5994, "S": 0.03124},
+    9: {"L": 1.0, "M": 71.9687, "S": 0.03117},
+    10: {"L": 1.0, "M": 73.2812, "S": 0.03118},
+    11: {"L": 1.0, "M": 74.5388, "S": 0.03125},
+    12: {"L": 1.0, "M": 75.7488, "S": 0.03137},
+    13: {"L": 1.0, "M": 76.9186, "S": 0.03154},
+    14: {"L": 1.0, "M": 78.0497, "S": 0.03174},
+    15: {"L": 1.0, "M": 79.1458, "S": 0.03197},
+    16: {"L": 1.0, "M": 80.2113, "S": 0.03222},
+    17: {"L": 1.0, "M": 81.2487, "S": 0.0325},
+    18: {"L": 1.0, "M": 82.2587, "S": 0.03279},
+    19: {"L": 1.0, "M": 83.2418, "S": 0.0331},
+    20: {"L": 1.0, "M": 84.1996, "S": 0.03342},
+    21: {"L": 1.0, "M": 85.1348, "S": 0.03376},
+    22: {"L": 1.0, "M": 86.0477, "S": 0.0341},
+    23: {"L": 1.0, "M": 86.941, "S": 0.03445},
+    24: {"L": 1.0, "M": 87.8161, "S": 0.03479}
 }
 
-WHO_HFA_GIRLS = {
-    0: {"L": 1, "M": 49.1477, "S": 0.03790},
-    1: {"L": 1, "M": 53.6872, "S": 0.03612},
-    2: {"L": 1, "M": 57.0673, "S": 0.03476},
-    3: {"L": 1, "M": 59.8029, "S": 0.03379},
-    4: {"L": 1, "M": 62.0899, "S": 0.03306},
-    5: {"L": 1, "M": 63.9977, "S": 0.03251},
-    6: {"L": 1, "M": 65.7311, "S": 0.03202},
-    12: {"L": 1, "M": 74.0157, "S": 0.03000},
-    18: {"L": 1, "M": 80.7002, "S": 0.02919},
-    24: {"L": 1, "M": 85.7163, "S": 0.02890},
-    36: {"L": 1, "M": 94.5348, "S": 0.02908},
-    48: {"L": 1, "M": 101.6226, "S": 0.02999},
-    60: {"L": 1, "M": 107.8628, "S": 0.03119},
+WHO_HFA_HEIGHT_BOYS = {
+    24: {"L": 1.0, "M": 87.1161, "S": 0.03507},
+    25: {"L": 1.0, "M": 87.972, "S": 0.03542},
+    26: {"L": 1.0, "M": 88.8065, "S": 0.03576},
+    27: {"L": 1.0, "M": 89.6197, "S": 0.0361},
+    28: {"L": 1.0, "M": 90.412, "S": 0.03642},
+    29: {"L": 1.0, "M": 91.1828, "S": 0.03674},
+    30: {"L": 1.0, "M": 91.9327, "S": 0.03704},
+    31: {"L": 1.0, "M": 92.6631, "S": 0.03733},
+    32: {"L": 1.0, "M": 93.3753, "S": 0.03761},
+    33: {"L": 1.0, "M": 94.0711, "S": 0.03787},
+    34: {"L": 1.0, "M": 94.7532, "S": 0.03812},
+    35: {"L": 1.0, "M": 95.4236, "S": 0.03836},
+    36: {"L": 1.0, "M": 96.0835, "S": 0.03858},
+    37: {"L": 1.0, "M": 96.7337, "S": 0.03879},
+    38: {"L": 1.0, "M": 97.3749, "S": 0.039},
+    39: {"L": 1.0, "M": 98.0073, "S": 0.03919},
+    40: {"L": 1.0, "M": 98.631, "S": 0.03937},
+    41: {"L": 1.0, "M": 99.2459, "S": 0.03954},
+    42: {"L": 1.0, "M": 99.8515, "S": 0.03971},
+    43: {"L": 1.0, "M": 100.4485, "S": 0.03986},
+    44: {"L": 1.0, "M": 101.0374, "S": 0.04002},
+    45: {"L": 1.0, "M": 101.6186, "S": 0.04016},
+    46: {"L": 1.0, "M": 102.1933, "S": 0.04031},
+    47: {"L": 1.0, "M": 102.7625, "S": 0.04045},
+    48: {"L": 1.0, "M": 103.3273, "S": 0.04059},
+    49: {"L": 1.0, "M": 103.8886, "S": 0.04073},
+    50: {"L": 1.0, "M": 104.4473, "S": 0.04086},
+    51: {"L": 1.0, "M": 105.0041, "S": 0.041},
+    52: {"L": 1.0, "M": 105.5596, "S": 0.04113},
+    53: {"L": 1.0, "M": 106.1138, "S": 0.04126},
+    54: {"L": 1.0, "M": 106.6668, "S": 0.04139},
+    55: {"L": 1.0, "M": 107.2188, "S": 0.04152},
+    56: {"L": 1.0, "M": 107.7697, "S": 0.04165},
+    57: {"L": 1.0, "M": 108.3198, "S": 0.04177},
+    58: {"L": 1.0, "M": 108.8689, "S": 0.0419},
+    59: {"L": 1.0, "M": 109.417, "S": 0.04202},
+    60: {"L": 1.0, "M": 109.9638, "S": 0.04214}
 }
 
-def interpolate_lms(age_months: int, reference_data: dict) -> Tuple[float, float, float]:
+WHO_HFA_LENGTH_GIRLS = {
+    0: {"L": 1.0, "M": 49.1477, "S": 0.0379},
+    1: {"L": 1.0, "M": 53.6872, "S": 0.0364},
+    2: {"L": 1.0, "M": 57.0673, "S": 0.03568},
+    3: {"L": 1.0, "M": 59.8029, "S": 0.0352},
+    4: {"L": 1.0, "M": 62.0899, "S": 0.03486},
+    5: {"L": 1.0, "M": 64.0301, "S": 0.03463},
+    6: {"L": 1.0, "M": 65.7311, "S": 0.03448},
+    7: {"L": 1.0, "M": 67.2873, "S": 0.03441},
+    8: {"L": 1.0, "M": 68.7498, "S": 0.0344},
+    9: {"L": 1.0, "M": 70.1435, "S": 0.03444},
+    10: {"L": 1.0, "M": 71.4818, "S": 0.03452},
+    11: {"L": 1.0, "M": 72.771, "S": 0.03464},
+    12: {"L": 1.0, "M": 74.015, "S": 0.03479},
+    13: {"L": 1.0, "M": 75.2176, "S": 0.03496},
+    14: {"L": 1.0, "M": 76.3817, "S": 0.03514},
+    15: {"L": 1.0, "M": 77.5099, "S": 0.03534},
+    16: {"L": 1.0, "M": 78.6055, "S": 0.03555},
+    17: {"L": 1.0, "M": 79.671, "S": 0.03576},
+    18: {"L": 1.0, "M": 80.7079, "S": 0.03598},
+    19: {"L": 1.0, "M": 81.7182, "S": 0.0362},
+    20: {"L": 1.0, "M": 82.7036, "S": 0.03643},
+    21: {"L": 1.0, "M": 83.6654, "S": 0.03666},
+    22: {"L": 1.0, "M": 84.604, "S": 0.03688},
+    23: {"L": 1.0, "M": 85.5202, "S": 0.03711},
+    24: {"L": 1.0, "M": 86.4153, "S": 0.03734}
+}
+
+WHO_HFA_HEIGHT_GIRLS = {
+    24: {"L": 1.0, "M": 85.7153, "S": 0.03764},
+    25: {"L": 1.0, "M": 86.5904, "S": 0.03786},
+    26: {"L": 1.0, "M": 87.4462, "S": 0.03808},
+    27: {"L": 1.0, "M": 88.283, "S": 0.0383},
+    28: {"L": 1.0, "M": 89.1004, "S": 0.03851},
+    29: {"L": 1.0, "M": 89.8991, "S": 0.03872},
+    30: {"L": 1.0, "M": 90.6797, "S": 0.03893},
+    31: {"L": 1.0, "M": 91.443, "S": 0.03913},
+    32: {"L": 1.0, "M": 92.1906, "S": 0.03933},
+    33: {"L": 1.0, "M": 92.9239, "S": 0.03952},
+    34: {"L": 1.0, "M": 93.6444, "S": 0.03971},
+    35: {"L": 1.0, "M": 94.3533, "S": 0.03989},
+    36: {"L": 1.0, "M": 95.0515, "S": 0.04006},
+    37: {"L": 1.0, "M": 95.7399, "S": 0.04024},
+    38: {"L": 1.0, "M": 96.4187, "S": 0.04041},
+    39: {"L": 1.0, "M": 97.0885, "S": 0.04057},
+    40: {"L": 1.0, "M": 97.7493, "S": 0.04073},
+    41: {"L": 1.0, "M": 98.4015, "S": 0.04089},
+    42: {"L": 1.0, "M": 99.0448, "S": 0.04105},
+    43: {"L": 1.0, "M": 99.6795, "S": 0.0412},
+    44: {"L": 1.0, "M": 100.3058, "S": 0.04135},
+    45: {"L": 1.0, "M": 100.9238, "S": 0.0415},
+    46: {"L": 1.0, "M": 101.5337, "S": 0.04164},
+    47: {"L": 1.0, "M": 102.136, "S": 0.04179},
+    48: {"L": 1.0, "M": 102.7312, "S": 0.04193},
+    49: {"L": 1.0, "M": 103.3197, "S": 0.04206},
+    50: {"L": 1.0, "M": 103.9021, "S": 0.0422},
+    51: {"L": 1.0, "M": 104.4786, "S": 0.04233},
+    52: {"L": 1.0, "M": 105.0494, "S": 0.04246},
+    53: {"L": 1.0, "M": 105.6148, "S": 0.04259},
+    54: {"L": 1.0, "M": 106.1748, "S": 0.04272},
+    55: {"L": 1.0, "M": 106.7295, "S": 0.04285},
+    56: {"L": 1.0, "M": 107.2788, "S": 0.04298},
+    57: {"L": 1.0, "M": 107.8227, "S": 0.0431},
+    58: {"L": 1.0, "M": 108.3613, "S": 0.04322},
+    59: {"L": 1.0, "M": 108.8948, "S": 0.04334},
+    60: {"L": 1.0, "M": 109.4233, "S": 0.04347}
+}
+
+def get_lms_parameters(age_months: int, reference_data: dict) -> Tuple[float, float, float]:
     """
-    Interpolasi linear untuk mendapatkan nilai L, M, S pada usia tertentu
+    Dapatkan nilai L, M, S langsung dari tabel WHO tanpa interpolasi.
+    Data WHO sudah lengkap untuk bulan 0-60.
     
     Args:
-        age_months: Usia dalam bulan
+        age_months: Usia dalam bulan (0-60)
         reference_data: Data referensi WHO (WFA atau HFA)
     
     Returns:
         Tuple (L, M, S)
+    
+    Raises:
+        ValueError: Jika usia di luar range 0-60 bulan
     """
-    # Jika data tersedia langsung
-    if age_months in reference_data:
-        data = reference_data[age_months]
-        return data["L"], data["M"], data["S"]
+    if age_months not in reference_data:
+        raise ValueError(f"Usia {age_months} bulan tidak tersedia dalam data WHO (range 0-60)")
     
-    # Cari dua titik terdekat untuk interpolasi
-    ages = sorted(reference_data.keys())
-    
-    # Jika di bawah range minimum
-    if age_months < ages[0]:
-        data = reference_data[ages[0]]
-        return data["L"], data["M"], data["S"]
-    
-    # Jika di atas range maksimum
-    if age_months > ages[-1]:
-        data = reference_data[ages[-1]]
-        return data["L"], data["M"], data["S"]
-    
-    # Interpolasi linear
-    for i in range(len(ages) - 1):
-        if ages[i] <= age_months <= ages[i + 1]:
-            age1, age2 = ages[i], ages[i + 1]
-            data1, data2 = reference_data[age1], reference_data[age2]
-            
-            # Proporsi
-            t = (age_months - age1) / (age2 - age1)
-            
-            # Interpolasi untuk L, M, S
-            L = data1["L"] + t * (data2["L"] - data1["L"])
-            M = data1["M"] + t * (data2["M"] - data1["M"])
-            S = data1["S"] + t * (data2["S"] - data1["S"])
-            
-            return L, M, S
-    
-    # Fallback (seharusnya tidak pernah tercapai)
-    data = reference_data[ages[0]]
+    data = reference_data[age_months]
     return data["L"], data["M"], data["S"]
 
 def calculate_zscore_lms(value: float, L: float, M: float, S: float) -> float:
     """
-    Menghitung Z-Score menggunakan metode LMS
-    
-    Formula: Z = ((value/M)^L - 1) / (L * S)
-    
-    Args:
-        value: Nilai pengukuran (berat atau tinggi)
-        L: Parameter L dari WHO
-        M: Parameter M dari WHO (median)
-        S: Parameter S dari WHO (coefficient of variation)
-    
-    Returns:
-        Z-Score
+    Menghitung Z-Score menggunakan metode LMS (WHO Child Growth Standards),
+    lengkap dengan penyesuaian Modified Z-Score untuk nilai ekstrem.
     """
+    # Hitung Z-score awal (unadjusted)
     if L == 0:
-        # Jika L = 0, gunakan formula alternatif
         z_score = np.log(value / M) / S
     else:
         z_score = (np.power(value / M, L) - 1) / (L * S)
     
-    return round(z_score, 2)
+    # Penyesuaian WHO untuk nilai ekstrem (> 3 atau < -3)
+    if z_score > 3:
+        sd3pos = M * np.power(1 + L * S * 3, 1 / L) if L != 0 else M * np.exp(3 * S)
+        sd2pos = M * np.power(1 + L * S * 2, 1 / L) if L != 0 else M * np.exp(2 * S)
+        sd23pos = sd3pos - sd2pos
+        z_score = 3 + ((value - sd3pos) / sd23pos)
+        
+    elif z_score < -3:
+        sd3neg = M * np.power(1 + L * S * (-3), 1 / L) if L != 0 else M * np.exp(-3 * S)
+        sd2neg = M * np.power(1 + L * S * (-2), 1 / L) if L != 0 else M * np.exp(-2 * S)
+        sd23neg = sd2neg - sd3neg
+        z_score = -3 + ((value - sd3neg) / sd23neg)
+        
+    return z_score
 
 def calculate_zscore_bbu(
     berat_badan: float,
@@ -157,101 +333,82 @@ def calculate_zscore_bbu(
     jenis_kelamin: Literal["L", "P"]
 ) -> float:
     """
-    Menghitung Z-Score Berat Badan/Usia (BB/U atau WFA - Weight-for-Age)
-    
-    Args:
-        berat_badan: Berat badan dalam kg
-        usia_bulan: Usia dalam bulan
-        jenis_kelamin: "L" untuk laki-laki, "P" untuk perempuan
-    
-    Returns:
-        Z-Score BB/U
+    Menghitung Z-Score Berat Badan/Usia (BB/U atau WFA - Weight-for-Age).
     """
-    # Pilih data referensi berdasarkan jenis kelamin
     reference_data = WHO_WFA_BOYS if jenis_kelamin == "L" else WHO_WFA_GIRLS
-    
-    # Dapatkan nilai L, M, S
-    L, M, S = interpolate_lms(usia_bulan, reference_data)
-    
-    # Hitung Z-Score
-    return calculate_zscore_lms(berat_badan, L, M, S)
+    L, M, S = get_lms_parameters(usia_bulan, reference_data)
+    z_score = calculate_zscore_lms(berat_badan, L, M, S)
+    return round(z_score, 2)
 
 def calculate_zscore_tbu(
     tinggi_badan: float,
     usia_bulan: int,
-    jenis_kelamin: Literal["L", "P"]
+    jenis_kelamin: Literal["L", "P"],
+    cara_ukur: Literal["terlentang", "berdiri"] = "terlentang" 
 ) -> float:
     """
-    Menghitung Z-Score Tinggi Badan/Usia (TB/U atau HFA - Height-for-Age)
-    
-    Args:
-        tinggi_badan: Tinggi badan dalam cm
-        usia_bulan: Usia dalam bulan
-        jenis_kelamin: "L" untuk laki-laki, "P" untuk perempuan
-    
-    Returns:
-        Z-Score TB/U
+    Menghitung Z-Score Tinggi Badan/Usia (TB/U atau HFA - Height-for-Age).
     """
-    # Pilih data referensi berdasarkan jenis kelamin
-    reference_data = WHO_HFA_BOYS if jenis_kelamin == "L" else WHO_HFA_GIRLS
-    
-    # Dapatkan nilai L, M, S
-    L, M, S = interpolate_lms(usia_bulan, reference_data)
-    
-    # Hitung Z-Score
-    return calculate_zscore_lms(tinggi_badan, L, M, S)
+    # 1. Koreksi ukuran berdasarkan cara ukur dan usia (Standar WHO)
+    if usia_bulan < 24 and cara_ukur == "berdiri":
+        tinggi_badan += 0.7 
+    elif usia_bulan >= 24 and cara_ukur == "terlentang":
+        tinggi_badan -= 0.7
+
+    # 2. Pilih tabel berdasarkan jenis kelamin & usia
+    if jenis_kelamin == "L":
+        if usia_bulan <= 23:
+            reference_data = WHO_HFA_LENGTH_BOYS
+        else:
+            reference_data = WHO_HFA_HEIGHT_BOYS
+    else:
+        if usia_bulan <= 23:
+            reference_data = WHO_HFA_LENGTH_GIRLS
+        else:
+            reference_data = WHO_HFA_HEIGHT_GIRLS
+
+    # 3. Hitung Z-score
+    L, M, S = get_lms_parameters(usia_bulan, reference_data)
+    z_score = calculate_zscore_lms(tinggi_badan, L, M, S)
+
+    return round(z_score, 2)
 
 def determine_nutrition_status(zscore_bbu: float, zscore_tbu: float) -> str:
     """
-    Menentukan status gizi berdasarkan Z-Score BB/U dan TB/U
+    Menentukan status gizi AKTUAL berdasarkan standar WHO.
+    Disinkronkan dengan 4 kategori label pada model KNN.
     
-    Klasifikasi:
-    - Stunting: TB/U < -2 SD
-    - Severely Stunted: TB/U < -3 SD
-    - Wasting: BB/U < -2 SD
-    - Severely Wasted: BB/U < -3 SD
-    - Normal: -2 SD <= Z-Score <= 2 SD
-    - Overweight: Z-Score > 2 SD
-    
-    Args:
-        zscore_bbu: Z-Score Berat Badan/Usia
-        zscore_tbu: Z-Score Tinggi Badan/Usia
-    
-    Returns:
-        Status gizi
+    Mapping:
+    - Normal & Gizi Baik (Code 0)
+    - Normal & Kurang Gizi (Code 1)
+    - Stunting & Gizi Baik (Code 2)
+    - Stunting & Kurang Gizi (Code 3)
     """
-    status_parts = []
     
-    # Klasifikasi berdasarkan TB/U (Stunting)
-    if zscore_tbu < -3:
-        status_parts.append("Severely Stunted")
-    elif zscore_tbu < -2:
-        status_parts.append("Stunting")
-    elif zscore_tbu > 2:
-        status_parts.append("Tinggi")
+    # 1. Tentukan Status Pertumbuhan (TB/U)
+    # Stunting jika Z-Score TB/U < -2.0
+    is_stunted = zscore_tbu < -2.0
     
-    # Klasifikasi berdasarkan BB/U (Wasting/Underweight)
-    if zscore_bbu < -3:
-        status_parts.append("Severely Underweight")
-    elif zscore_bbu < -2:
-        status_parts.append("Underweight")
-    elif zscore_bbu > 2:
-        status_parts.append("Overweight")
+    # 2. Tentukan Status Gizi (BB/U)
+    # Kurang Gizi jika Z-Score BB/U < -2.0
+    is_underweight = zscore_bbu < -2.0
     
-    # Jika tidak ada masalah
-    if not status_parts:
-        return "Normal"
+    # 3. Gabungkan menjadi 4 Kategori Utama
+    if not is_stunted and not is_underweight:
+        return "Normal & Gizi Baik"      # Code 0
     
-    return ", ".join(status_parts)
+    elif not is_stunted and is_underweight:
+        return "Normal & Kurang Gizi"    # Code 1
+    
+    elif is_stunted and not is_underweight:
+        return "Stunting & Gizi Baik"    # Code 2
+    
+    else: # is_stunted and is_underweight
+        return "Stunting & Kurang Gizi"  # Code 3
 
 def is_stunting(zscore_tbu: float) -> bool:
     """
-    Menentukan apakah balita mengalami stunting
-    
-    Args:
-        zscore_tbu: Z-Score Tinggi Badan/Usia
-    
-    Returns:
-        True jika stunting (TB/U < -2 SD), False jika tidak
+    Fungsi pembantu medis untuk mendeteksi stunting secara cepat.
+    Sesuai standar WHO: Z-Score < -2.0 SD.
     """
     return zscore_tbu < -2.0

@@ -6,8 +6,9 @@
 import api from './api';
 
 /**
- * Get performa model KNN
+ * Get performa model KNN dari training test set
  * Menghitung confusion matrix, accuracy, precision, recall, F1-score
+ * Data dari 80/20 split training CSV
  */
 export const getModelPerformance = async () => {
   try {
@@ -20,15 +21,33 @@ export const getModelPerformance = async () => {
 };
 
 /**
- * Bandingkan performa model dengan nilai k berbeda (k=3, k=5, k=7)
+ * Get performa model KNN dari DATA REAL pengukuran yang dilakukan
+ * Menggunakan ground truth: zscore_tbu < -2.0
+ * Total data evaluasi = jumlah pengukuran yang ada di database
+ */
+export const getRealPerformance = async () => {
+  try {
+    const response = await api.get('/evaluasi/real-performance');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching real performance:', error);
+    throw error.response?.data || { detail: 'Gagal mengambil data performa real' };
+  }
+};
+
+/**
+ * Bandingkan performa model dengan nilai k berbeda (k=3, k=5, k=7, k=9)
+ * Mengambil data dari getModelPerformance() response
  */
 export const compareKValues = async () => {
   try {
-    const response = await api.get('/evaluasi/compare-k-values');
-    return response.data;
+    const response = await getModelPerformance();
+    // Extract k_comparisons dari response
+    return response.k_comparisons || [];
   } catch (error) {
-    console.error('Error comparing k-values:', error);
-    throw error.response?.data || { detail: 'Gagal membandingkan nilai k' };
+    console.error('Error getting k-comparisons:', error);
+    // Return empty array as fallback instead of throwing
+    return [];
   }
 };
 
@@ -89,6 +108,7 @@ export const getMetricBadgeClass = (value) => {
 
 export default {
   getModelPerformance,
+  getRealPerformance,
   formatPercentage,
   getMetricColorClass,
   getMetricBadgeClass

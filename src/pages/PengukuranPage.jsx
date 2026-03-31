@@ -10,17 +10,22 @@ import Sidebar from "../components/Sidebar";
 import PengukuranForm from "../components/PengukuranForm";
 import { pengukuranService } from "../services/pengukuranService";
 import { balitaService } from "../services/balitaService";
+import { posyanduService } from "../services/posyanduService";
 import { formatDate, formatDateTime, censorChildName } from "../utils/helpers";
+import { useAuthStore } from "../store/authStore";
 import toast from "react-hot-toast";
 
 const PengukuranPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [pengukuranList, setPengukuranList] = useState([]);
   const [balitaList, setBalitaList] = useState([]);
+  const [posyanduList, setPosyanduList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(null);
+  const [searchNamaBalita, setSearchNamaBalita] = useState(''); // Filter pencarian nama balita
   const [showFullNames, setShowFullNames] = useState({});
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [evaluasiDetail, setEvaluasiDetail] = useState(null);
@@ -31,6 +36,12 @@ const PengukuranPage = () => {
   const [editingPengukuran, setEditingPengukuran] = useState(null);
   const [loadingUpdate, setLoadingUpdate] = useState(false);
   const [editForm, setEditForm] = useState({ tinggi_badan: "", berat_badan: "", lingkar_lengan: "", lingkar_kepala: "", catatan: "" });
+  
+  // State untuk Export Modal
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportPeriod, setExportPeriod] = useState('bulanan');
+  const [exportSelectedMonth, setExportSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const getLast6MonthsOptions = () => {
     const months = [];
@@ -59,6 +70,8 @@ const PengukuranPage = () => {
     try {
       const data = await balitaService.getAll();
       setBalitaList(data);
+      const posyandu = await posyanduService.getAll();
+      setPosyanduList(posyandu);
     } catch (error) {
       console.error("Error loading balita:", error);
     }
@@ -72,7 +85,28 @@ const PengukuranPage = () => {
         params.bulan = selectedMonth.value;
       }
       const data = await pengukuranService.getAll(params);
-      setPengukuranList(data);
+      
+      // Sort by created_at DESC (newest input first) atau tanggal_pengukuran + id
+      const sortedData = data.sort((a, b) => {
+        // Primary: tanggal_pengukuran DESC
+        const dateA = new Date(a.tanggal_pengukuran);
+        const dateB = new Date(b.tanggal_pengukuran);
+        const dateCompare = dateB - dateA;
+        
+        if (dateCompare !== 0) return dateCompare;
+        
+        // Secondary: created_at DESC (jika tanggal sama, yang terbaru di atas)
+        if (a.created_at && b.created_at) {
+          return new Date(b.created_at) - new Date(a.created_at);
+        }
+        
+        // Tertiary: id DESC (fallback jika created_at null)
+        return b.id - a.id;
+      });
+      
+      console.log("📊 Sorted data (first 3):", sortedData.slice(0, 3).map(d => ({ id: d.id, tanggal: d.tanggal_pengukuran, created: d.created_at, nama: d.balita_nama })));
+      
+      setPengukuranList(sortedData);
     } catch (error) {
       console.error("Error loading pengukuran:", error);
       toast.error("Gagal memuat data pengukuran");
@@ -93,8 +127,33 @@ const PengukuranPage = () => {
     }));
   };
 
+  // Badge color berdasarkan status_gizi
+  const getStatusGiziBadgeClass = (statusGizi) => {
+    if (!statusGizi) return "px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800";
+    
+    const status = statusGizi.toLowerCase();
+    
+    if (status.includes("normal") && status.includes("baik")) {
+      return "px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800";      // Normal + Baik - Green
+    }
+    
+    if (status.includes("normal") && status.includes("kurang")) {
+      return "px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800";    // Normal + Kurang - Yellow
+    }
+    
+    if (status.includes("stunting") && status.includes("baik")) {
+      return "px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800";    // Stunting + Baik - Orange
+    }
+    
+    if (status.includes("stunting") && status.includes("kurang")) {
+      return "px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800";          // Stunting + Kurang - Red
+    }
+    
+    return "px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800";
+  };
+
   const getStuntingBadgeClass = (prediksi) => {
-    // prediksi bisa boolean atau string
+    // Backward compatibility: prediksi bisa boolean atau string
     const isStunting = prediksi === true || prediksi === "Stunting" || prediksi === 1;
     if (isStunting) {
       return "px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800";
@@ -169,6 +228,61 @@ const PengukuranPage = () => {
     }
   };
 
+  const handleExportWithPeriod = async () => {
+    try {
+      setExportLoading(true);
+      const toastId = toast.loading('Generating laporan...');
+
+      // Fetch fresh user data from backend for all kader users
+      let userData = user;
+      if (user?.role === "kader") {
+        try {
+          const token = localStorage.getItem("access_token");
+          const response = await fetch("http://localhost:8000/api/v1/auth/me", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            const freshUser = await response.json();
+            localStorage.setItem("user", JSON.stringify(freshUser));
+            userData = freshUser;
+          }
+        } catch (err) {
+          console.error("Fetch error:", err);
+        }
+      }
+
+      const data = await pengukuranService.getAll({ limit: 999999 });
+      const balita = await balitaService.getAll({ limit: 999999 });
+      const posyandu = await posyanduService.getAll();
+
+      // Import fungsi export yang sesuai
+      const { exportLaporanByPeriod } = await import('../utils/excelExport');
+
+      await exportLaporanByPeriod(
+        data,
+        balita,
+        posyandu,
+        exportPeriod,
+        exportSelectedMonth,
+        new Date().getFullYear(),
+        userData
+      );
+
+      toast.dismiss();
+      toast.success('Laporan berhasil diexport!');
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.dismiss();
+      toast.error('Gagal export laporan: ' + (error.message || 'Unknown error'));
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -197,32 +311,55 @@ const PengukuranPage = () => {
             {/* Header Desktop */}
             <div className="hidden lg:flex justify-between items-center mb-6">
               <h1 className="text-2xl font-bold text-gray-900">Data Pengukuran</h1>
-              <button onClick={() => setShowFormModal(true)} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Tambah Pengukuran
-              </button>
+              <div className="flex gap-3">
+                <button onClick={() => setShowExportModal(true)} className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export Laporan
+                </button>
+                <button onClick={() => setShowFormModal(true)} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Tambah Pengukuran
+                </button>
+              </div>
             </div>
 
-            {/* Month Filter */}
-            <div className="mb-4 sm:mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Filter Bulan Pengukuran</label>
-              <CreatableSelect
-                isClearable
-                options={getLast6MonthsOptions()}
-                value={selectedMonth}
-                onChange={setSelectedMonth}
-                placeholder="Pilih bulan atau ketik format YYYY-MM"
-                className="max-w-md"
-                styles={{
-                  control: (base) => ({
-                    ...base,
-                    minHeight: "44px",
-                    fontSize: "16px",
-                  }),
-                }}
-              />
+            {/* Filter Controls - Top Right */}
+            <div className="mb-6 grid grid-cols-12 gap-3">
+              {/* Search Filter - Col 9 */}
+              <div className="col-span-9">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Cari Nama</label>
+                <input
+                  type="text"
+                  placeholder="Nama balita..."
+                  value={searchNamaBalita}
+                  onChange={(e) => setSearchNamaBalita(e.target.value.toLowerCase())}
+                  className="w-full px-3 py-0 h-9 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+              
+              {/* Month Filter - Col 3 */}
+              <div className="col-span-3">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Filter Bulan</label>
+                <CreatableSelect
+                  isClearable
+                  options={getLast6MonthsOptions()}
+                  value={selectedMonth}
+                  onChange={setSelectedMonth}
+                  placeholder="Pilih bulan"
+                  className="text-xs"
+                  styles={{
+                    control: (base) => ({
+                      ...base,
+                      minHeight: "36px",
+                      fontSize: "12px",
+                    }),
+                  }}
+                />
+              </div>
             </div>
 
             {/* Table View */}
@@ -234,35 +371,42 @@ const PengukuranPage = () => {
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Balita</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Usia Saat Diukur</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">TB (cm)</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">BB (kg)</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">LL (cm)</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">LK (cm)</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Z-Score BB/U</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Z-Score TB/U</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status Gizi</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prediksi</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Klasifikasi Status Gizi</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {loading ? (
                       <tr>
-                        <td colSpan="13" className="px-4 py-8 text-center text-gray-500 text-sm">
+                        <td colSpan="12" className="px-4 py-8 text-center text-gray-500 text-sm">
                           Loading...
                         </td>
                       </tr>
                     ) : pengukuranList.length === 0 ? (
                       <tr>
-                        <td colSpan="13" className="px-4 py-8 text-center text-gray-500 text-sm">
+                        <td colSpan="12" className="px-4 py-8 text-center text-gray-500 text-sm">
                           Tidak ada data pengukuran
                         </td>
                       </tr>
                     ) : (
-                      pengukuranList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((pengukuran, index) => (
+                      pengukuranList
+                        .filter(pengukuran => {
+                          const namaBalita = getNamaBalita(pengukuran.balita_id).toLowerCase();
+                          return searchNamaBalita === '' || namaBalita.includes(searchNamaBalita);
+                        })
+                        .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                        .map((pengukuran, index) => {
+                          const nomor = (currentPage - 1) * itemsPerPage + index + 1;
+                          return (
                         <tr key={pengukuran.id} className="hover:bg-gray-50 even:bg-gray-50/50">
-                          <td className="px-4 py-3 text-center text-sm text-gray-900">{index + 1}</td>
+                          <td className="px-4 py-3 text-center text-sm text-gray-900">{nomor}</td>
                           <td className="px-4 py-3 text-sm text-gray-900">{formatDate(pengukuran.tanggal_pengukuran)}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
@@ -290,6 +434,7 @@ const PengukuranPage = () => {
                               </button>
                             </div>
                           </td>
+                          <td className="px-4 py-3 text-center text-sm text-gray-900">{pengukuran.usia_bulan} bulan</td>
                           <td className="px-4 py-3 text-center text-sm text-gray-900">{pengukuran.tinggi_badan}</td>
                           <td className="px-4 py-3 text-center text-sm text-gray-900">{pengukuran.berat_badan}</td>
                           <td className="px-4 py-3 text-center text-sm text-gray-900">{pengukuran.lingkar_lengan || "-"}</td>
@@ -309,19 +454,22 @@ const PengukuranPage = () => {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <span className={getStatusGiziBadge(pengukuran.status_gizi)}>{pengukuran.status_gizi || "-"}</span>
+                            {pengukuran.status_gizi ? (
+                              <span className={getStatusGiziBadgeClass(pengukuran.status_gizi)}>
+                                {pengukuran.status_gizi}
+                              </span>
+                            ) : (
+                              "-"
+                            )}
                           </td>
-                          <td className="px-4 py-3">
-                            <span className={getStuntingBadgeClass(pengukuran.prediksi_stunting)}>{pengukuran.prediksi_stunting === true || pengukuran.prediksi_stunting === "Stunting" ? "Stunting" : "Tidak"}</span>
-                          </td>
-                          <td className="px-4 py-3 text-center text-sm text-gray-900">{pengukuran.confidence_score ? `${(pengukuran.confidence_score * 100).toFixed(1)}%` : "-"}</td>
                           <td className="px-4 py-3 text-center">
                             <button onClick={() => handleEditOpen(pengukuran)} className="text-orange-600 hover:text-orange-900 text-xs font-semibold border border-orange-500 px-2 py-1 rounded">
                               Update Data
                             </button>
                           </td>
                         </tr>
-                      ))
+                        );
+                        })
                     )}
                   </tbody>
                 </table>
@@ -428,6 +576,7 @@ const PengukuranPage = () => {
                   <input
                     type="number"
                     step="0.1"
+                    inputMode="decimal"
                     required
                     value={editForm.berat_badan}
                     onChange={(e) => setEditForm((f) => ({ ...f, berat_badan: e.target.value }))}
@@ -439,6 +588,7 @@ const PengukuranPage = () => {
                   <input
                     type="number"
                     step="0.1"
+                    inputMode="decimal"
                     required
                     value={editForm.tinggi_badan}
                     onChange={(e) => setEditForm((f) => ({ ...f, tinggi_badan: e.target.value }))}
@@ -450,6 +600,7 @@ const PengukuranPage = () => {
                   <input
                     type="number"
                     step="0.1"
+                    inputMode="decimal"
                     required
                     value={editForm.lingkar_lengan}
                     onChange={(e) => setEditForm((f) => ({ ...f, lingkar_lengan: e.target.value }))}
@@ -461,6 +612,7 @@ const PengukuranPage = () => {
                   <input
                     type="number"
                     step="0.1"
+                    inputMode="decimal"
                     required
                     value={editForm.lingkar_kepala}
                     onChange={(e) => setEditForm((f) => ({ ...f, lingkar_kepala: e.target.value }))}
@@ -557,7 +709,7 @@ const PengukuranPage = () => {
                                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${(neighbor.label || "").includes("Stunting") ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}>{neighbor.label}</span>
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-500">
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
                                   <span>
                                     JK: <b>{neighbor.jenis_kelamin}</b>
                                   </span>
@@ -569,6 +721,12 @@ const PengukuranPage = () => {
                                   </span>
                                   <span>
                                     BB: <b>{neighbor.berat_badan} kg</b>
+                                  </span>
+                                  <span>
+                                    Z-BB: <b>{neighbor.z_score_bb ?? '-'}</b>
+                                  </span>
+                                  <span>
+                                    Z-TB: <b>{neighbor.z_score_tb ?? '-'}</b>
                                   </span>
                                 </div>
                               </td>
@@ -613,6 +771,99 @@ const PengukuranPage = () => {
                   loadPengukuran();
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-lg">
+            <h2 className="text-xl font-bold mb-4">Export Laporan</h2>
+            
+            <div className="space-y-4">
+              {/* Bulanan */}
+              <div>
+                <label className="flex items-center mb-3">
+                  <input
+                    type="radio"
+                    name="period"
+                    value="bulanan"
+                    checked={exportPeriod === 'bulanan'}
+                    onChange={(e) => setExportPeriod(e.target.value)}
+                    className="mr-3"
+                  />
+                  <span className="font-medium">Bulanan</span>
+                </label>
+                {exportPeriod === 'bulanan' && (
+                  <div className="ml-6 mb-3">
+                    <select
+                      value={exportSelectedMonth}
+                      onChange={(e) => setExportSelectedMonth(parseInt(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    >
+                      {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map((month, idx) => (
+                        <option key={idx} value={idx + 1}>{month}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-600 mt-1">Data semua posyandu untuk 1 bulan</p>
+                  </div>
+                )}
+              </div>
+
+              {/* H1 */}
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="period"
+                    value="H1"
+                    checked={exportPeriod === 'H1'}
+                    onChange={(e) => setExportPeriod(e.target.value)}
+                    className="mr-3"
+                  />
+                  <span className="font-medium">H1 (Sep - Feb)</span>
+                </label>
+                {exportPeriod === 'H1' && (
+                  <p className="text-xs text-gray-600 ml-6 mt-1">Riwayat 6 bulan per posyandu</p>
+                )}
+              </div>
+
+              {/* H2 */}
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="period"
+                    value="H2"
+                    checked={exportPeriod === 'H2'}
+                    onChange={(e) => setExportPeriod(e.target.value)}
+                    className="mr-3"
+                  />
+                  <span className="font-medium">H2 (Mar - Agu)</span>
+                </label>
+                {exportPeriod === 'H2' && (
+                  <p className="text-xs text-gray-600 ml-6 mt-1">Riwayat 6 bulan per posyandu</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowExportModal(false)}
+                disabled={exportLoading}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleExportWithPeriod}
+                disabled={exportLoading}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+              >
+                {exportLoading ? 'Loading...' : 'Export'}
+              </button>
             </div>
           </div>
         </div>

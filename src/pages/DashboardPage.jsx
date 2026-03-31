@@ -33,6 +33,12 @@ const DashboardPage = () => {
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(null);
   
+  // State untuk Export Modal
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportPeriod, setExportPeriod] = useState('bulanan');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [exportLoading, setExportLoading] = useState(false);
+  
   // Pagination untuk data table admin
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -91,16 +97,16 @@ const DashboardPage = () => {
     }));
   };
 
-  const handleExportLaporan = async () => {
+  const handleExportWithPeriod = async () => {
     try {
-      toast.loading("Generating laporan...");
+      setExportLoading(true);
+      const toastId = toast.loading('Generating laporan...');
 
       // Fetch fresh user data from backend for all kader users
       let userData = user;
       if (user?.role === "kader") {
         try {
           const token = localStorage.getItem("access_token");
-
           const response = await fetch("http://localhost:8000/api/v1/auth/me", {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -109,8 +115,6 @@ const DashboardPage = () => {
 
           if (response.ok) {
             const freshUser = await response.json();
-
-            // Update localStorage and use fresh data
             localStorage.setItem("user", JSON.stringify(freshUser));
             userData = freshUser;
           }
@@ -119,18 +123,33 @@ const DashboardPage = () => {
         }
       }
 
-      // Reload posyandu list
+      // Reload data
       const posyandu = await posyanduService.getAll();
+      const pengukuran = await pengukuranService.getAll({ limit: 500 });
+      const balita = await balitaService.getAll({ limit: 500 });
 
-      const data = await pengukuranService.getAll();
+      // Import fungsi export yang sesuai
+      const { exportLaporanByPeriod } = await import('../utils/excelExport');
+      
+      await exportLaporanByPeriod(
+        pengukuran,
+        balita,
+        posyandu,
+        exportPeriod,
+        selectedMonth,
+        new Date().getFullYear(),
+        userData
+      );
 
-      await exportPengukuranToExcel(data, posyandu, userData);
       toast.dismiss();
-      toast.success("Laporan berhasil diexport!");
+      toast.success('Laporan berhasil diexport!');
+      setShowExportModal(false);
     } catch (error) {
-      console.error("Export error:", error);
+      console.error('Export error:', error);
       toast.dismiss();
-      toast.error("Gagal export laporan: " + (error.response?.data?.detail || error.message));
+      toast.error('Gagal export laporan: ' + (error.message || 'Unknown error'));
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -314,8 +333,8 @@ const DashboardPage = () => {
               <div className="bg-white rounded-lg shadow p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
                   <h2 className="text-base sm:text-lg font-bold">Pengukuran Terbaru</h2>
-                  <button onClick={handleExportLaporan} className="text-xs sm:text-sm text-white bg-green-600 hover:bg-green-700 px-3 py-2 rounded-md touch-manipulation">
-                    Export Excel
+                  <button onClick={() => setShowExportModal(true)} className="text-xs sm:text-sm text-white bg-green-600 hover:bg-green-700 px-3 py-2 rounded-md touch-manipulation">
+                    Export Laporan
                   </button>
                 </div>
 
@@ -488,6 +507,98 @@ const DashboardPage = () => {
               )}
             </div>
 
+            {/* Export Modal */}
+            {showExportModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-lg">
+                  <h2 className="text-xl font-bold mb-4">Export Laporan</h2>
+                  
+                  <div className="space-y-4">
+                    {/* Bulanan */}
+                    <div>
+                      <label className="flex items-center mb-3">
+                        <input
+                          type="radio"
+                          name="period"
+                          value="bulanan"
+                          checked={exportPeriod === 'bulanan'}
+                          onChange={(e) => setExportPeriod(e.target.value)}
+                          className="mr-3"
+                        />
+                        <span className="font-medium">Bulanan</span>
+                      </label>
+                      {exportPeriod === 'bulanan' && (
+                        <div className="ml-6 mb-3">
+                          <select
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          >
+                            {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map((month, idx) => (
+                              <option key={idx} value={idx + 1}>{month}</option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-gray-600 mt-1">Data semua posyandu untuk 1 bulan</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* H1 */}
+                    <div>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="period"
+                          value="H1"
+                          checked={exportPeriod === 'H1'}
+                          onChange={(e) => setExportPeriod(e.target.value)}
+                          className="mr-3"
+                        />
+                        <span className="font-medium">H1 (Sep - Feb)</span>
+                      </label>
+                      {exportPeriod === 'H1' && (
+                        <p className="text-xs text-gray-600 ml-6 mt-1">Riwayat 6 bulan per posyandu</p>
+                      )}
+                    </div>
+
+                    {/* H2 */}
+                    <div>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="period"
+                          value="H2"
+                          checked={exportPeriod === 'H2'}
+                          onChange={(e) => setExportPeriod(e.target.value)}
+                          className="mr-3"
+                        />
+                        <span className="font-medium">H2 (Mar - Agu)</span>
+                      </label>
+                      {exportPeriod === 'H2' && (
+                        <p className="text-xs text-gray-600 ml-6 mt-1">Riwayat 6 bulan per posyandu</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => setShowExportModal(false)}
+                      disabled={exportLoading}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={handleExportWithPeriod}
+                      disabled={exportLoading}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {exportLoading ? 'Loading...' : 'Export'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             </div>
           )}
         </main>

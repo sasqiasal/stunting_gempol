@@ -148,7 +148,7 @@ export const calculateAge = (birthDate) => {
  * @returns {string}
  */
 export const formatNumber = (num, decimals = 2) => {
-  if (num === null || num === undefined) return '-';
+  if (num === null || num === undefined) return 'absen';
   return Number(num).toFixed(decimals);
 };
 
