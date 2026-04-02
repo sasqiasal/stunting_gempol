@@ -12,7 +12,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, L
 
 const StuntingHistoryChart = ({ data, isLoading, error, userRole }) => {
   // Check if data is empty
-  const isEmpty = !data || !data.data || data.data.length === 0 || data.total === 0;
+  const isEmpty = !data || !data.data || data.data.length === 0 || (data.total ?? 0) === 0;
   const hasNoStuntingCases = data && data.data && data.data.every(item => item.jumlah === 0);
 
   // Loading state
@@ -64,7 +64,7 @@ const StuntingHistoryChart = ({ data, isLoading, error, userRole }) => {
             </div>
             <div>
               <p className="text-lg sm:text-xl font-bold text-green-800 mb-2">
-                🎉 Kabar Baik!
+                Kabar Baik!
               </p>
               <p className="text-base sm:text-lg font-semibold text-green-700">
                 Tidak ada riwayat balita terkena stunting pada periode ini
@@ -93,9 +93,9 @@ const StuntingHistoryChart = ({ data, isLoading, error, userRole }) => {
           </span>
         </div>
         <p className="text-xs sm:text-sm text-gray-600">
-          Periode: <span className="font-semibold">{data.periode}</span>
+          Periode: <span className="font-semibold">{data?.periode || "6 Bulan Terakhir"}</span>
           {' • '}
-          Total Kasus: <span className="font-semibold text-red-600">{data.total}</span>
+          Total Kasus: <span className="font-semibold text-red-600">{data?.total ?? 0}</span>
         </p>
       </div>
 
@@ -189,23 +189,18 @@ const StuntingHistoryChart = ({ data, isLoading, error, userRole }) => {
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div className="bg-red-50 rounded-lg p-3 text-center">
             <p className="text-xs sm:text-sm text-red-600 font-medium">Total Kasus</p>
-            <p className="text-2xl sm:text-3xl font-bold text-red-700">{data.total}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-red-700">{data?.total ?? 0}</p>
           </div>
           <div className="bg-blue-50 rounded-lg p-3 text-center">
             <p className="text-xs sm:text-sm text-blue-600 font-medium">Rata-rata/Bulan</p>
             <p className="text-2xl sm:text-3xl font-bold text-blue-700">
-              {(data.total / 6).toFixed(1)}
+              {((data?.total ?? 0) / 6).toFixed(1)}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Info Footer */}
-      <div className="mt-4 pt-3 border-t border-gray-200">
-        <p className="text-xs text-gray-500 text-center">
-          ℹ️ Data diperbarui secara real-time berdasarkan hasil pengukuran terbaru
-        </p>
-      </div>
+
     </div>
   );
 };

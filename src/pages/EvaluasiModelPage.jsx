@@ -373,12 +373,12 @@ const EvaluasiModelPage = () => {
                             </td>
                             <td className="px-4 py-3 text-center">
                               {pred.is_correct ? (
-                                <span className="text-green-600 font-bold">✓ Benar</span>
+                                <span className="text-green-600 font-bold">Benar</span>
                               ) : (
-                                <span className="text-red-600 font-bold">✗ Salah</span>
+                                <span className="text-red-600 font-bold">Salah</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-gray-600">{pred.tanggal}</td>
+                            <td className="px-4 py-3 text-gray-600">{pred.tanggal ? new Date(pred.tanggal).toLocaleDateString('id-ID') : '-'}</td>
                             <td className="px-4 py-3 text-center">
                               <button
                                 onClick={() => setExpandedNeighbors(expandedNeighbors === idx ? null : idx)}
@@ -433,7 +433,7 @@ const EvaluasiModelPage = () => {
                                         <tr key={nidx} className="hover:bg-gray-50">
                                           <td className="border border-gray-200 p-2 text-center font-medium">{nidx + 1}</td>
                                           <td className="border border-gray-200 p-2 text-center font-bold text-blue-600">{neighbor.distance ?? '-'}</td>
-                                          <td className="border border-gray-200 p-2 text-center">{neighbor.jenis_kelamin === 'L' ? '👦 Laki' : '👧 Perempuan'}</td>
+                                          <td className="border border-gray-200 p-2 text-center">{neighbor.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</td>
                                           <td className="border border-gray-200 p-2 text-center">{neighbor.usia_bulan || '-'}</td>
                                           <td className="border border-gray-200 p-2 text-center">{(neighbor.berat_badan || 0).toFixed(1)}</td>
                                           <td className="border border-gray-200 p-2 text-center">{(neighbor.tinggi_badan || 0).toFixed(1)}</td>
@@ -471,14 +471,7 @@ const EvaluasiModelPage = () => {
                 </table>
               </div>
 
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
-                <p className="font-semibold mb-2">📌 Cara menghitung Status Aktual dari 2 Z-Score:</p>
-                <ul className="space-y-1 ml-4 list-disc">
-                  <li><strong>Z-Score TB (Tinggi Badan)</strong>: Jika &lt; -2.0 → <span className="text-orange-600 font-bold">Stunting</span>, Jika ≥ -2.0 → <span className="text-orange-600 font-bold">Normal</span></li>
-                  <li><strong>Z-Score BB (Berat Badan)</strong>: Jika &lt; -1.0 → <span className="text-orange-600 font-bold">Kurang Gizi</span>, Jika ≥ -1.0 → <span className="text-orange-600 font-bold">Gizi Baik</span></li>
-                  <li><strong>Kombinasi</strong>: Hasil dari kedua z-score digabung menjadi satu dari 4 status (Normal+Baik, Normal+Kurang, Stunting+Baik, Stunting+Kurang)</li>
-                </ul>
-              </div>
+
             </section>
             )}
 
@@ -488,7 +481,7 @@ const EvaluasiModelPage = () => {
                 onClick={() => fetchAllData()}
                 className="px-6 py-2 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 transition-colors"
               >
-                🔄 Refresh
+                Refresh
               </button>
             </div>
           </div>

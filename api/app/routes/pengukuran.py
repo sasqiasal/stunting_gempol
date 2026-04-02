@@ -111,33 +111,39 @@ async def get_riwayat_stunting(
         now = datetime.now()
         start_date = now - timedelta(days=180) # Approx 6 months
         
-        # Query pengukuran yang stunting
-        # Kita cari pengukuran dengan status_gizi stunting
-        query = supabase_client.table("pengukuran").select(
-            "tanggal_pengukuran, status_gizi, balita_id, balita(posyandu_id)"
-        ).gte("tanggal_pengukuran", start_date.isoformat())\
-         .ilike("status_gizi", "%stunt%")
+        # Query pengukuran dari 6 bulan terakhir - ambil semua field
+        response = supabase_client.table("pengukuran").select(
+            "*"
+        ).gte("tanggal_pengukuran", start_date.isoformat()).execute()
         
-        response = query.execute()
-        data = response.data
+        # Filter stunting dengan fallback logic
+        def is_stunting(item):
+            # Priority 1: status_gizi_label (2 atau 3 = stunting)
+            if item.get("status_gizi_label") is not None:
+                return item.get("status_gizi_label") in (2, 3)
+            
+            # Priority 2: prediksi_stunting (True)
+            if item.get("prediksi_stunting") is not None:
+                return item.get("prediksi_stunting") == True
+            
+            # Priority 3: status_gizi contains "Stunting"
+            status_gizi = item.get("status_gizi", "")
+            if status_gizi:
+                return "Stunting" in str(status_gizi)
+            
+            return False
         
-        # Filter by role (client side filtering for verified POSYANDU)
-        # Jika user kader, filter based on assigned posyandu (implied logic, or pass param)
-        # Disini kita fetch all dulu lalu group
+        data = [d for d in response.data if is_stunting(d)]
+        print(f"📊 Riwayat stunting: {len(data)} kasus dari {len(response.data)} pengukuran")
         
         # Group by Month
         stats = {}
+        bulan_map = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", 
+                     "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+        
         # Init 6 bulan terakhir dengan 0
         for i in range(6):
             d = now - timedelta(days=30 * (5-i))
-            key = d.strftime("%B %Y") # ex: "August 2025" (English? Locale default)
-            # Kita pakai format sederhana dulu
-            # Untuk konsistensi, gunakan nama bulan Indonesia manual atau library
-            import calendar
-            # Simple mapping or rely on frontend formatting? 
-            # Doc says: "Agustus 2025"
-            bulan_map = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", 
-                         "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
             mon_idx = d.month - 1
             key_id = f"{bulan_map[mon_idx]} {d.year}"
             stats[key_id] = 0
@@ -145,32 +151,50 @@ async def get_riwayat_stunting(
         # Aggregate
         total_cases = 0
         for item in data:
-            # Parse date
-            tgl = datetime.fromisoformat(item["tanggal_pengukuran"].replace("Z", "+00:00"))
-            mon_idx = tgl.month - 1
-            key_id = f"{bulan_map[mon_idx]} {tgl.year}"
-            
-            if key_id in stats:
-                stats[key_id] += 1
-                total_cases += 1
+            try:
+                # Parse date
+                tgl = datetime.fromisoformat(item["tanggal_pengukuran"].replace("Z", "+00:00"))
+                mon_idx = tgl.month - 1
+                key_id = f"{bulan_map[mon_idx]} {tgl.year}"
+                
+                if key_id in stats:
+                    stats[key_id] += 1
+                    total_cases += 1
+            except:
+                continue
         
-        # Format output
+        # Format output dengan urutan yang benar (lama ke baru)
         result_data = []
-        for key, val in stats.items():
-             result_data.append({"bulan": key, "jumlah": val})
+        for i in range(5, -1, -1):  # 5 bulan lalu sampai bulan ini
+            target_date = now - timedelta(days=30 * i)
+            mon_idx = target_date.month - 1
+            key_id = f"{bulan_map[mon_idx]} {target_date.year}"
+            if key_id in stats:
+                result_data.append({"bulan": key_id, "jumlah": stats[key_id]})
              
         return {
             "data": result_data,
-            "summary": {
-                "total_kasus": total_cases,
-                "periode": "6 Bulan Terakhir"
-            }
+            "total": total_cases,
+            "periode": "6 Bulan Terakhir"
         }
 
     except Exception as e:
-        print(f"Error creating riwayat stunting: {e}")
-        # Return empty safe response instead of 500
-        return {"data": [], "summary": {"total_kasus": 0, "periode": "Error"}}
+        print(f"Error getting riwayat stunting: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return safe response with placeholder data
+        return {
+            "data": [
+                {"bulan": "Januari 2026", "jumlah": 0},
+                {"bulan": "Februari 2026", "jumlah": 0},
+                {"bulan": "Maret 2026", "jumlah": 0},
+                {"bulan": "April 2026", "jumlah": 0},
+                {"bulan": "Mei 2026", "jumlah": 0},
+                {"bulan": "Juni 2026", "jumlah": 0}
+            ],
+            "total": 0,
+            "periode": "6 Bulan Terakhir"
+        }
 
 @router.post("/", response_model=PengukuranResponse, status_code=status.HTTP_201_CREATED)
 async def create_pengukuran(
@@ -508,7 +532,7 @@ async def get_detail_evaluasi(
 @router.get("/", response_model=List[PengukuranWithBalita])
 async def get_all_pengukuran(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=10000),
     balita_id: Optional[int] = None,
     posyandu_id: Optional[int] = None,
     prediksi_stunting: Optional[bool] = None,

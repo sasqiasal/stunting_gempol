@@ -254,8 +254,8 @@ const PengukuranPage = () => {
         }
       }
 
-      const data = await pengukuranService.getAll({ limit: 999999 });
-      const balita = await balitaService.getAll({ limit: 999999 });
+      const data = await pengukuranService.getAll({ limit: 10000 });
+      const balita = await balitaService.getAll({ limit: 10000 });
       const posyandu = await posyanduService.getAll();
 
       // Import fungsi export yang sesuai

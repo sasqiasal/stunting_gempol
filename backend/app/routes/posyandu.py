@@ -51,13 +51,28 @@ async def get_all_posyandu(
 ):
     """
     Mendapatkan semua data posyandu dengan statistik (Public access untuk peta)
+    
+    LOGIKA PENGHITUNGAN STUNTING:
+    1. Prioritas: Hitung dari pengukuran BULAN TERKINI (April 2024)
+    2. Fallback: Jika tidak ada pengukuran bulan ini, gunakan status_terkini
+    
+    Contoh:
+    - Posyandu Ceria Maret: 2 stunting
+    - April: Belum ada pengukuran → Tampil 2 (fallback)
+    - April: Ada 1 pengukuran stunting baru → Tampil 1 (dari data April saja)
     """
+    from datetime import datetime
+    
     # Query posyandu dengan count balita
     query = supabase_client.table("posyandu").select(
         "*, balita(count)"
     ).range(skip, skip + limit - 1).order("nama")
     
     response = query.execute()
+    
+    # Hitung awal bulan terkini
+    now = datetime.now()
+    first_day_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     # Tambahkan statistik stunting per posyandu
     results = []
@@ -69,33 +84,51 @@ async def get_all_posyandu(
             "id", count="exact"
         ).eq("posyandu_id", posyandu_id).execute()
         
-        # Count balita stunting di posyandu ini
-        # Gunakan %stunt% agar mencakup "Stunting", "Severely Stunted", dll
-        stunting_response = supabase_client.table("balita").select(
-            "id", count="exact"
-        ).eq("posyandu_id", posyandu_id).ilike("status_terkini", "%stunt%").execute()
-        
-        # Count pengukuran bulan ini
-        # Karena pengukuran tidak punya posyandu_id, kita hitung dari balita di posyandu ini
-        from datetime import datetime, timedelta
-        # Gunakan awal bulan dari waktu saat ini
-        now = datetime.now()
-        first_day_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        jumlah_balita = balita_response.count or 0
         
         # Get all balita_id dari posyandu ini
-        balita_ids_response = supabase_client.table("balita").select("id").eq("posyandu_id", posyandu_id).execute()
+        balita_ids_response = supabase_client.table("balita").select(
+            "id, status_terkini"
+        ).eq("posyandu_id", posyandu_id).execute()
         balita_ids = [b["id"] for b in balita_ids_response.data] if balita_ids_response.data else []
+        balita_data = {b["id"]: b["status_terkini"] for b in balita_ids_response.data} if balita_ids_response.data else {}
         
-        # Count pengukuran dari balita-balita tersebut
+        jumlah_stunting = 0
         jumlah_pengukuran_bulan_ini = 0
-        if balita_ids:
-            pengukuran_response = supabase_client.table("pengukuran").select(
-                "id", count="exact"
-            ).in_("balita_id", balita_ids).gte("tanggal_pengukuran", first_day_of_month.isoformat()).execute()
-            jumlah_pengukuran_bulan_ini = pengukuran_response.count or 0
         
-        jumlah_balita = balita_response.count or 0
-        jumlah_stunting = stunting_response.count or 0
+        if balita_ids:
+            # PRIORITAS 1: Cek pengukuran bulan terkini
+            try:
+                pengukuran_response = supabase_client.table("pengukuran").select(
+                    "*"
+                ).in_("balita_id", balita_ids).gte("tanggal_pengukuran", first_day_of_month.isoformat()).execute()
+                
+                jumlah_pengukuran_bulan_ini = len(pengukuran_response.data) if pengukuran_response.data else 0
+                
+                if jumlah_pengukuran_bulan_ini > 0 and pengukuran_response.data:
+                    # Ada pengukuran bulan ini → hitung stunting dari sini saja
+                    # Stunting = status_gizi_label in (2, 3) atau prediksi_stunting = true
+                    balita_stunting_bulan_ini = set()
+                    for pengukuran in pengukuran_response.data:
+                        # Priority: status_gizi_label (2, 3) = stunting
+                        if pengukuran.get("status_gizi_label") in (2, 3):
+                            balita_stunting_bulan_ini.add(pengukuran["balita_id"])
+                        # Fallback: prediksi_stunting = true
+                        elif pengukuran.get("prediksi_stunting") == True:
+                            balita_stunting_bulan_ini.add(pengukuran["balita_id"])
+                    
+                    jumlah_stunting = len(balita_stunting_bulan_ini)
+                else:
+                    # FALLBACK: Tidak ada pengukuran bulan ini → gunakan status_terkini
+                    for balita_id, status in balita_data.items():
+                        if status and "stunt" in status.lower():
+                            jumlah_stunting += 1
+            except Exception as e:
+                # Fallback jika ada error query
+                print(f"⚠️ Error querying pengukuran: {e}")
+                for balita_id, status in balita_data.items():
+                    if status and "stunt" in status.lower():
+                        jumlah_stunting += 1
         
         result = {**posyandu}
         result["jumlah_balita"] = jumlah_balita
@@ -112,24 +145,67 @@ async def get_posyandu_geojson(
 ):
     """
     Mendapatkan data posyandu dalam format GeoJSON untuk peta (Public access)
+    
+    LOGIKA PENGHITUNGAN STUNTING:
+    1. Prioritas: Hitung dari pengukuran BULAN TERKINI (April 2024)
+    2. Fallback: Jika tidak ada pengukuran bulan ini, gunakan status_terkini
     """
+    from datetime import datetime
+    
     # Query posyandu dengan statistik
     response = supabase_client.table("posyandu").select("*").execute()
+    
+    # Hitung awal bulan terkini
+    now = datetime.now()
+    first_day_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     features = []
     
     for posyandu in response.data:
-        # Count balita dan stunting
+        # Count total balita di posyandu ini
         balita_response = supabase_client.table("balita").select(
-            "id", count="exact"
+            "id, status_terkini", count="exact"
         ).eq("posyandu_id", posyandu["id"]).execute()
         
-        stunting_response = supabase_client.table("balita").select(
-            "id", count="exact"
-        ).eq("posyandu_id", posyandu["id"]).ilike("status_terkini", "%stunting%").execute()
-        
         jumlah_balita = balita_response.count or 0
-        jumlah_stunting = stunting_response.count or 0
+        balita_ids = [b["id"] for b in balita_response.data] if balita_response.data else []
+        balita_data = {b["id"]: b["status_terkini"] for b in balita_response.data} if balita_response.data else {}
+        
+        jumlah_stunting = 0
+        
+        if balita_ids:
+            # PRIORITAS 1: Cek pengukuran bulan terkini
+            try:
+                pengukuran_response = supabase_client.table("pengukuran").select(
+                    "*"
+                ).in_("balita_id", balita_ids).gte("tanggal_pengukuran", first_day_of_month.isoformat()).execute()
+                
+                jumlah_pengukuran_bulan_ini = len(pengukuran_response.data) if pengukuran_response.data else 0
+                
+                if jumlah_pengukuran_bulan_ini > 0 and pengukuran_response.data:
+                    # Ada pengukuran bulan ini → hitung stunting dari sini saja
+                    balita_stunting_bulan_ini = set()
+                    for pengukuran in pengukuran_response.data:
+                        # Priority: status_gizi_label (2, 3) = stunting
+                        if pengukuran.get("status_gizi_label") in (2, 3):
+                            balita_stunting_bulan_ini.add(pengukuran["balita_id"])
+                        # Fallback: prediksi_stunting = true
+                        elif pengukuran.get("prediksi_stunting") == True:
+                            balita_stunting_bulan_ini.add(pengukuran["balita_id"])
+                    
+                    jumlah_stunting = len(balita_stunting_bulan_ini)
+                else:
+                    # FALLBACK: Tidak ada pengukuran bulan ini → gunakan status_terkini
+                    for balita_id, status in balita_data.items():
+                        if status and "stunt" in status.lower():
+                            jumlah_stunting += 1
+            except Exception as e:
+                # Fallback jika ada error query
+                print(f"⚠️ Error querying pengukuran: {e}")
+                for balita_id, status in balita_data.items():
+                    if status and "stunt" in status.lower():
+                        jumlah_stunting += 1
+        
         persentase_stunting = (jumlah_stunting / jumlah_balita * 100) if jumlah_balita > 0 else 0
         
         # Buat GeoJSON Feature
@@ -167,7 +243,13 @@ async def get_posyandu(
 ):
     """
     Mendapatkan detail posyandu berdasarkan ID
+    
+    LOGIKA PENGHITUNGAN STUNTING:
+    1. Prioritas: Hitung dari pengukuran BULAN TERKINI
+    2. Fallback: Jika tidak ada pengukuran bulan ini, gunakan status_terkini
     """
+    from datetime import datetime
+    
     response = supabase_client.table("posyandu").select("*").eq("id", posyandu_id).execute()
     
     if not response.data:
@@ -178,17 +260,56 @@ async def get_posyandu(
     
     posyandu = response.data[0]
     
-    # Tambahkan statistik
+    # Hitung awal bulan terkini
+    now = datetime.now()
+    first_day_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get balita di posyandu ini
     balita_response = supabase_client.table("balita").select(
-        "id", count="exact"
+        "id, status_terkini", count="exact"
     ).eq("posyandu_id", posyandu_id).execute()
     
-    stunting_response = supabase_client.table("balita").select(
-        "id", count="exact"
-    ).eq("posyandu_id", posyandu_id).ilike("status_terkini", "%stunting%").execute()
+    jumlah_balita = balita_response.count or 0
+    balita_ids = [b["id"] for b in balita_response.data] if balita_response.data else []
+    balita_data = {b["id"]: b["status_terkini"] for b in balita_response.data} if balita_response.data else {}
     
-    posyandu["jumlah_balita"] = balita_response.count or 0
-    posyandu["jumlah_stunting"] = stunting_response.count or 0
+    jumlah_stunting = 0
+    
+    if balita_ids:
+        # PRIORITAS 1: Cek pengukuran bulan terkini
+        try:
+            pengukuran_response = supabase_client.table("pengukuran").select(
+                "*"
+            ).in_("balita_id", balita_ids).gte("tanggal_pengukuran", first_day_of_month.isoformat()).execute()
+            
+            jumlah_pengukuran_bulan_ini = len(pengukuran_response.data) if pengukuran_response.data else 0
+            
+            if jumlah_pengukuran_bulan_ini > 0 and pengukuran_response.data:
+                # Ada pengukuran bulan ini → hitung stunting dari sini saja
+                balita_stunting_bulan_ini = set()
+                for pengukuran in pengukuran_response.data:
+                    # Priority: status_gizi_label (2, 3) = stunting
+                    if pengukuran.get("status_gizi_label") in (2, 3):
+                        balita_stunting_bulan_ini.add(pengukuran["balita_id"])
+                    # Fallback: prediksi_stunting = true
+                    elif pengukuran.get("prediksi_stunting") == True:
+                        balita_stunting_bulan_ini.add(pengukuran["balita_id"])
+                
+                jumlah_stunting = len(balita_stunting_bulan_ini)
+            else:
+                # FALLBACK: Tidak ada pengukuran bulan ini → gunakan status_terkini
+                for balita_id, status in balita_data.items():
+                    if status and "stunt" in status.lower():
+                        jumlah_stunting += 1
+        except Exception as e:
+            # Fallback jika ada error query
+            print(f"⚠️ Error querying pengukuran: {e}")
+            for balita_id, status in balita_data.items():
+                if status and "stunt" in status.lower():
+                    jumlah_stunting += 1
+    
+    posyandu["jumlah_balita"] = jumlah_balita
+    posyandu["jumlah_stunting"] = jumlah_stunting
     
     return posyandu
 

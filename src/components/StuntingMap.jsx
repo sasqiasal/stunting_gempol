@@ -183,7 +183,7 @@ export const StuntingMap = ({ onPosyanduSelect }) => {
 
   return (
     <div className="h-full w-full relative">
-      <MapContainer center={[-7.55, 112.7]} zoom={15} minZoom={13} maxZoom={18} className="h-full w-full z-0" scrollWheelZoom={true}>
+      <MapContainer center={[-7.55, 112.7]} zoom={15} minZoom={15} maxZoom={16} className="h-full w-full z-0" scrollWheelZoom={false}>
         <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         {/* Render GeoJSON Features */}

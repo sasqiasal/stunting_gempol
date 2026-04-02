@@ -12,6 +12,14 @@ import { pengukuranService } from "../services/pengukuranService";
 import { balitaService } from "../services/balitaService";
 import { censorChildName } from "../utils/helpers";
 
+// Helper: Normalize decimal input (handle both , and .)
+const normalizeDecimal = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  const str = String(value).trim();
+  // Replace comma with dot and handle multiple decimals
+  return str.replace(',', '.');
+};
+
 export const PengukuranForm = ({ balitaId, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [balitaList, setBalitaList] = useState([]);
@@ -193,15 +201,15 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
         tanggalPengukuran = `${year}-${String(month).padStart(2, '0')}-01`;
       }
 
-      // Convert strings to numbers
+      // Convert strings to numbers (normalize decimal separators)
       const payload = {
         balita_id: parseInt(data.balita_id),
         tanggal_pengukuran: tanggalPengukuran,
         usia_bulan: calculatedAge, // Usia saat diukur (bukan usia balita saat ini)
-        tinggi_badan: parseFloat(data.tinggi_badan),
-        berat_badan: parseFloat(data.berat_badan),
-        lingkar_lengan: parseFloat(data.lingkar_lengan),
-        lingkar_kepala: parseFloat(data.lingkar_kepala),
+        tinggi_badan: parseFloat(normalizeDecimal(data.tinggi_badan)),
+        berat_badan: parseFloat(normalizeDecimal(data.berat_badan)),
+        lingkar_lengan: parseFloat(normalizeDecimal(data.lingkar_lengan)),
+        lingkar_kepala: parseFloat(normalizeDecimal(data.lingkar_kepala)),
       };
 
       // Hanya tambahkan catatan jika ada isinya
@@ -340,6 +348,18 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
           {errors.balita_id && <p className="mt-1 text-sm text-red-600">{errors.balita_id.message}</p>}
         </div>
 
+        {/* CSS untuk hilangkan spinner number input */}
+        <style>{`
+          input[type='number']::-webkit-outer-spin-button,
+          input[type='number']::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          input[type='number'] {
+            -moz-appearance: textfield;
+          }
+        `}</style>
+
         {/* Data Pengukuran - Touch-Friendly Inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Berat Badan - FIRST */}
@@ -350,9 +370,15 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
             <input
               type="number"
               step="0.01"
+              min="0"
               inputMode="decimal"
               {...register("berat_badan", {
                 required: "Berat badan harus diisi",
+                validate: (value) => {
+                  const normalized = normalizeDecimal(value);
+                  const num = parseFloat(normalized);
+                  return !isNaN(num) || "Nilai harus berupa angka (gunakan . untuk desimal)";
+                }
               })}
               className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Contoh: 12.5"
@@ -368,9 +394,15 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
             <input
               type="number"
               step="0.1"
+              min="0"
               inputMode="decimal"
               {...register("tinggi_badan", {
                 required: "Tinggi badan harus diisi",
+                validate: (value) => {
+                  const normalized = normalizeDecimal(value);
+                  const num = parseFloat(normalized);
+                  return !isNaN(num) || "Nilai harus berupa angka (gunakan . untuk desimal)";
+                }
               })}
               className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Contoh: 85.5"
@@ -386,9 +418,15 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
             <input
               type="number"
               step="0.1"
+              min="0"
               inputMode="decimal"
               {...register("lingkar_lengan", {
                 required: "Lingkar lengan harus diisi",
+                validate: (value) => {
+                  const normalized = normalizeDecimal(value);
+                  const num = parseFloat(normalized);
+                  return !isNaN(num) || "Nilai harus berupa angka (gunakan . untuk desimal)";
+                }
               })}
               className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Contoh: 14.2"
@@ -404,9 +442,15 @@ export const PengukuranForm = ({ balitaId, onSuccess }) => {
             <input
               type="number"
               step="0.1"
+              min="0"
               inputMode="decimal"
               {...register("lingkar_kepala", {
                 required: "Lingkar kepala harus diisi",
+                validate: (value) => {
+                  const normalized = normalizeDecimal(value);
+                  const num = parseFloat(normalized);
+                  return !isNaN(num) || "Nilai harus berupa angka (gunakan . untuk desimal)";
+                }
               })}
               className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Contoh: 47.5"

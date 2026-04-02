@@ -21,6 +21,7 @@ const DashboardPage = () => {
   const { user } = useAuthStore();
   const [statistik, setStatistik] = useState(null);
   const [recentPengukuran, setRecentPengukuran] = useState([]);
+  const [allPengukuranForSebaranStatus, setAllPengukuranForSebaranStatus] = useState([]);
   const [balitaList, setBalitaList] = useState([]);
   const [showFullNames, setShowFullNames] = useState({});
   const [posyanduList, setPosyanduList] = useState([]);
@@ -52,14 +53,29 @@ const DashboardPage = () => {
     try {
       setLoading(true);
 
+      // Get current month and previous month
+      const today = new Date();
+      const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      
+      // Calculate previous month
+      const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const previousMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
       // Load statistik
       const stats = await pengukuranService.getStatistik();
       setStatistik(stats);
 
-      // Load recent pengukuran (load lebih banyak untuk table di admin, limit untuk cards di kader)
+      // Load recent pengukuran (tanpa filter bulan, ambil yang paling terbaru saja)
       const pengukuranLimit = user?.role === "admin" ? 500 : 10;
-      const pengukuran = await pengukuranService.getAll({ limit: pengukuranLimit });
+      const pengukuran = await pengukuranService.getAll({ 
+        limit: pengukuranLimit
+        // Tidak filter bulan - ambil pengukuran terbaru dari kapan saja
+      });
       setRecentPengukuran(pengukuran);
+
+      // Load ALL pengukuran (2 bulan: kemarin + terkini) untuk Sebaran Status Gizi
+      const allPengukuran = await pengukuranService.getAll({ limit: 1000 });
+      setAllPengukuranForSebaranStatus(allPengukuran);
 
       // Load posyandu
       const posyandu = await posyanduService.getAll();
@@ -165,30 +181,63 @@ const DashboardPage = () => {
     }
   };
 
+  // Hitung statistik berdasarkan data pengukuran real-time (bukan balita list)
   const totalBalita = balitaList.length;
-  const totalSudahDiukur = balitaList.filter((item) => item.status_terkini && String(item.status_terkini).trim() !== "").length;
+  
+  // Total balita yang sudah diukur = unique balita dalam recentPengukuran
+  const balitaSudahDiukur = new Set(recentPengukuran.map(p => p.balita_id)).size;
+  const totalSudahDiukur = Math.min(balitaSudahDiukur, totalBalita);
   const totalBelumDiukur = Math.max(totalBalita - totalSudahDiukur, 0);
 
-  const sebaranStatusGizi = balitaList.reduce(
-    (acc, item) => {
-      const status = (item.status_terkini || "").toLowerCase();
-
-      if (!status) {
-        return acc;
+  // Sebaran status gizi: gunakan data bulan kemarin, kecuali ada pengukuran baru bulan terkini
+  const getSebaranStatusGiziData = () => {
+    const today = new Date();
+    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const currentMonthDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    // Check apakah ada pengukuran di bulan terkini
+    const hasMeasurementThisMonth = allPengukuranForSebaranStatus.some(item => {
+      const itemDate = new Date(item.tanggal_pengukuran);
+      return itemDate.getFullYear() === today.getFullYear() && 
+             itemDate.getMonth() === today.getMonth();
+    });
+    
+    // Filter data berdasarkan apakah ada pengukuran bulan terkini
+    let dataForSebaran = [];
+    if (hasMeasurementThisMonth) {
+      // Ada pengukuran bulan terkini → gunakan data bulan terkini
+      dataForSebaran = recentPengukuran;
+    } else {
+      // Tidak ada pengukuran bulan terkini → gunakan data bulan kemarin
+      dataForSebaran = allPengukuranForSebaranStatus.filter(item => {
+        const itemDate = new Date(item.tanggal_pengukuran);
+        return itemDate.getFullYear() === currentMonthDate.getFullYear() && 
+               itemDate.getMonth() === currentMonthDate.getMonth() - 1;
+      });
+    }
+    
+    // Get latest measurement per balita
+    const latestMeasurementPerBalita = dataForSebaran.reduce((acc, item) => {
+      if (!acc[item.balita_id] || new Date(item.tanggal_pengukuran) > new Date(acc[item.balita_id].tanggal_pengukuran)) {
+        acc[item.balita_id] = item;
       }
-
-      if (status.includes("stunt")) {
-        acc.stunting += 1;
-      } else if (status.includes("kurus") || status.includes("wasting") || status.includes("kurang gizi")) {
-        acc.kurus += 1;
-      } else if (status.includes("normal")) {
-        acc.normal += 1;
-      }
-
       return acc;
-    },
-    { normal: 0, kurus: 0, stunting: 0 }
-  );
+    }, {});
+
+    return Object.values(latestMeasurementPerBalita).reduce(
+      (acc, item) => {
+        if (item.prediksi_stunting) {
+          acc.stunting += 1;
+        } else {
+          acc.normal += 1;
+        }
+        return acc;
+      },
+      { normal: 0, stunting: 0 }
+    );
+  };
+
+  const sebaranStatusGizi = getSebaranStatusGiziData();
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -228,7 +277,7 @@ const DashboardPage = () => {
                     {recentPengukuran.length === 0 ? (
                       <p className="text-sm text-gray-500 text-center py-8">Belum ada data pengukuran</p>
                     ) : (
-                      recentPengukuran.map((item) => (
+                      recentPengukuran.slice(0, 5).map((item) => (
                         <div key={item.id} className="border-b pb-3 last:border-0">
                           <div className="flex items-center gap-2">
                             <p className="font-medium text-sm">{showFullNames[item.balita_id] ? item.balita_nama : censorChildName(item.balita_nama)}</p>
@@ -272,14 +321,10 @@ const DashboardPage = () => {
 
                   <div className="bg-white rounded-lg shadow p-4 sm:p-6">
                     <h2 className="text-base sm:text-lg font-bold mb-4">Sebaran Status Gizi</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="rounded-lg bg-green-50 p-3">
                         <p className="text-sm text-gray-600">Normal</p>
                         <p className="text-2xl font-bold text-success-700">{sebaranStatusGizi.normal}</p>
-                      </div>
-                      <div className="rounded-lg bg-yellow-50 p-3">
-                        <p className="text-sm text-gray-600">Kurus</p>
-                        <p className="text-2xl font-bold text-yellow-700">{sebaranStatusGizi.kurus}</p>
                       </div>
                       <div className="rounded-lg bg-red-50 p-3">
                         <p className="text-sm text-gray-600">Stunting</p>
@@ -342,7 +387,7 @@ const DashboardPage = () => {
                   {recentPengukuran.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-8">Belum ada data pengukuran</p>
                   ) : (
-                    recentPengukuran.map((item) => (
+                    recentPengukuran.slice(0, 5).map((item) => (
                       <div key={item.id} className="border-b pb-3 last:border-0">
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-sm">{showFullNames[item.balita_id] ? item.balita_nama : censorChildName(item.balita_nama)}</p>
@@ -383,129 +428,7 @@ const DashboardPage = () => {
               </div>
             </div>
 
-            {/* Data Table - All Measurements */}
-            <div className="bg-white rounded-lg shadow mb-4 sm:mb-8">
-              <div className="p-4 sm:p-6 border-b">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-base sm:text-lg font-bold">Data Pengukuran</h2>
-                  <span className="text-sm text-gray-600">Total: {recentPengukuran.length} data</span>
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Balita</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usia</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">JK</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TB (cm)</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">BB (kg)</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {recentPengukuran.length === 0 ? (
-                      <tr>
-                        <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
-                          Belum ada data pengukuran
-                        </td>
-                      </tr>
-                    ) : (
-                      recentPengukuran
-                        .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-                        .map((item, index) => (
-                          <tr key={item.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {(currentPage - 1) * itemsPerPage + index + 1}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {new Date(item.tanggal_pengukuran).toLocaleDateString("id-ID")}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-gray-900">
-                                  {showFullNames[item.balita_id] ? item.balita_nama : censorChildName(item.balita_nama)}
-                                </span>
-                                <button
-                                  onClick={() => toggleShowName(item.balita_id)}
-                                  className="text-gray-400 hover:text-gray-600 focus:outline-none"
-                                  title={showFullNames[item.balita_id] ? "Sembunyikan" : "Tampilkan"}
-                                >
-                                  {showFullNames[item.balita_id] ? (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                  ) : (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                                    </svg>
-                                  )}
-                                </button>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{item.usia_bulan} bln</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {item.jenis_kelamin === "L" ? "L" : "P"}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{item.tinggi_badan}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{item.berat_badan}</td>
-                            <td className="px-4 py-3 text-sm">
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  item.prediksi_stunting
-                                    ? "bg-red-100 text-red-700"
-                                    : "bg-green-100 text-green-700"
-                                }`}
-                              >
-                                {item.prediksi_stunting ? "STUNTING" : "NORMAL"}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
 
-              {/* Pagination */}
-              {recentPengukuran.length > itemsPerPage && (
-                <div className="px-4 py-3 border-t bg-gray-50 sm:px-6">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-700">
-                      Menampilkan <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> -{" "}
-                      <span className="font-medium">
-                        {Math.min(currentPage * itemsPerPage, recentPengukuran.length)}
-                      </span>{" "}
-                      dari <span className="font-medium">{recentPengukuran.length}</span> data
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                        className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() =>
-                          setCurrentPage((prev) =>
-                            Math.min(Math.ceil(recentPengukuran.length / itemsPerPage), prev + 1)
-                          )
-                        }
-                        disabled={currentPage >= Math.ceil(recentPengukuran.length / itemsPerPage)}
-                        className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Export Modal */}
             {showExportModal && (
