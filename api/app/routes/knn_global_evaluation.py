@@ -9,9 +9,9 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 
 try:
-    from app.ml.evaluate_knn_global import KNNGlobalEvaluator
+    from app.ml.evaluate_knn_global import KNNGlobalEvaluator4Class
 except ImportError:
-    from ..ml.evaluate_knn_global import KNNGlobalEvaluator
+    from ..ml.evaluate_knn_global import KNNGlobalEvaluator4Class
 
 
 router = APIRouter(
@@ -73,7 +73,7 @@ async def evaluate_global_knn() -> Dict[str, Any]:
         JSON response dengan confusion matrix, metrics, dan interpretasi
     """
     try:
-        evaluator = KNNGlobalEvaluator(k=5)
+        evaluator = KNNGlobalEvaluator4Class(k=5)
         result = evaluator.evaluate_global()
         interpretation = evaluator.get_interpretation(result)
         
@@ -119,7 +119,7 @@ async def evaluate_global_knn_summary() -> Dict[str, Any]:
     ```
     """
     try:
-        evaluator = KNNGlobalEvaluator(k=5)
+        evaluator = KNNGlobalEvaluator4Class(k=5)
         result = evaluator.evaluate_global()
         
         m = result['metrics']
@@ -198,7 +198,7 @@ async def get_global_confusion_matrix() -> Dict[str, Any]:
     ```
     """
     try:
-        evaluator = KNNGlobalEvaluator(k=5)
+        evaluator = KNNGlobalEvaluator4Class(k=5)
         result = evaluator.evaluate_global()
         
         from datetime import datetime
