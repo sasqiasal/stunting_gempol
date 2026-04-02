@@ -109,7 +109,23 @@ async def login(credentials: UserLogin, supabase_client = Depends(get_supabase))
         
         print(f"[LOGIN] Token created successfully")
         
-        user_response = {k: v for k, v in user.items() if k != "hashed_password"}
+        # Convert user dict to UserResponse model with validation
+        try:
+            user_response = UserResponse(
+                id=user["id"],
+                email=user["email"],
+                nama_lengkap=user.get("nama_lengkap", ""),
+                role=user.get("role", "kader"),
+                no_telepon=user.get("no_telepon"),
+                alamat=user.get("alamat"),
+                posyandu_id=user.get("posyandu_id"),
+                is_active=user.get("is_active", True),
+                created_at=user.get("created_at"),
+                updated_at=user.get("updated_at")
+            )
+        except Exception as model_error:
+            print(f"[LOGIN] ERROR converting to UserResponse: {str(model_error)}")
+            raise Exception(f"User data validation error: {str(model_error)}")
         
         return {
             "access_token": access_token,
