@@ -47,7 +47,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         True jika password cocok, False jika tidak
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        result = pwd_context.verify(plain_password, hashed_password)
+        print(f"DEBUG verify_password: plain={plain_password}, hashed={hashed_password[:20]}..., result={result}")
+        return result
+    except Exception as e:
+        print(f"DEBUG verify_password ERROR: {str(e)}")
+        # Fallback: Cek apakah password plain (belum di-hash)
+        if plain_password == hashed_password:
+            print("DEBUG: Password match plaintext (tidak di-hash!)")
+            return True
+        return False
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
