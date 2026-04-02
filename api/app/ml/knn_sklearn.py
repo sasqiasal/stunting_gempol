@@ -134,8 +134,8 @@ class StuntingKNNModel:
         # Encode jenis kelamin: L=1, P=0
         jk_encoded = 1 if jenis_kelamin == "L" else 0
         
-        # Gabungkan 6 fitur (sesuai dengan training data)
-        # Order: JK, Usia, BB, TB, LL, LK
+        # Gabungkan 8 fitur (sesuai dengan training data saat ini)
+        # Order: JK, Usia, BB, TB, LL, LK, Z_BB, Z_TB
         features = np.array([
             jk_encoded,
             usia_bulan,
@@ -143,28 +143,25 @@ class StuntingKNNModel:
             tinggi_badan,
             lingkar_lengan,
             lingkar_kepala,
+            zscore_bbu,
+            zscore_tbu
         ]).reshape(1, -1)
         
         return features
     
     def _apply_custom_weights(self, X_scaled: np.ndarray) -> np.ndarray:
         """
-        Memberi bobot lebih pada fitur tertentu setelah scaling.
-        Terutama Gender agar jarak antar gender menjadi sangat jauh.
-        
-        Ini memastikan model lebih memilih tetangga dengan gender yang sama.
-        
-        Args:
-            X_scaled: Fitur yang sudah di-scale (normalized)
-            
-        Returns:
-            Fitur dengan custom weights diterapkan
+        Memberi bobot pada fitur tertentu setelah scaling (StandardScaler).
+        Sesuai request, fitur Z-BB dan Z-TB diberikan bobot 2x lebih besar 
+        daripada fitur lainnya agar prediksinya menempel pada standar kurva WHO.
         """
         X_weighted = X_scaled.copy()
         
-        # Perbesar bobot Gender (index 0) agar menjadi pembeda utama
-        # Nilai 5.0 cukup besar untuk memastikan gender separation yang kuat
-        X_weighted[:, 0] *= 5.0
+        # Seluruh fitur lainnya (JK, Usia, BB, TB, LL, LK) dibiarkan pada skala 1.0
+        
+        # Perbesar bobot Z-BB (index 6) dan Z-TB (index 7) menjadi 2.0
+        X_weighted[:, 6] *= 2.0
+        X_weighted[:, 7] *= 2.0
         
         return X_weighted
 
@@ -356,6 +353,9 @@ class StuntingKNNModel:
                 # Label mapping untuk 4-class
                 label_text = self.CLASS_LABELS.get(label, f"Unknown ({label})")
                 
+                z_bb = float(original_data[6]) if len(original_data) > 6 else 0.0
+                z_tb = float(original_data[7]) if len(original_data) > 7 else 0.0
+                
                 neighbor_info = {
                     "distance": round(float(dist), 4),
                     "label": label_text,
@@ -365,7 +365,9 @@ class StuntingKNNModel:
                     "berat_badan": float(original_data[2]),
                     "tinggi_badan": float(original_data[3]),
                     "lingkar_lengan": float(original_data[4]),
-                    "lingkar_kepala": float(original_data[5])
+                    "lingkar_kepala": float(original_data[5]),
+                    "z_score_bb": round(z_bb, 2),
+                    "z_score_tb": round(z_tb, 2)
                 }
                 
                 relevant_neighbors.append(neighbor_info)

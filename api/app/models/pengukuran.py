@@ -14,6 +14,7 @@ class PengukuranBase(BaseModel):
 class PengukuranCreate(PengukuranBase):
     """Model untuk create pengukuran"""
     tanggal_pengukuran: Optional[date] = None  # Jika None, pakai tanggal hari ini
+    usia_bulan: Optional[int] = None  # Usia saat diukur (opsional, akan dihitung jika tidak ada)
 
 class PengukuranUpdate(BaseModel):
     """Model untuk update pengukuran (hanya field yang bisa diubah)"""
@@ -24,30 +25,30 @@ class PengukuranUpdate(BaseModel):
     catatan: Optional[str] = None
 
 class PengukuranResponse(PengukuranBase):
-    """Model response pengukuran dengan hasil prediksi (4 kelas)"""
+    """Model response pengukuran dengan hasil prediksi"""
     id: int
     kader_id: int
-    usia_bulan: int
-    jenis_kelamin: str
-    zscore_bbu: float = Field(..., description="Z-Score Berat Badan/Usia")
-    zscore_tbu: float = Field(..., description="Z-Score Tinggi Badan/Usia")
-    status_gizi: str = Field(..., description="Status Gizi 4 Kelas: Normal+Baik, Normal+Kurang, Stunting+Baik, Stunting+Kurang")
-    status_gizi_label: int = Field(..., description="Label integer: 0=Normal+Baik, 1=Normal+Kurang, 2=Stunting+Baik, 3=Stunting+Kurang")
-    confidence_score: float
+    usia_bulan: Optional[int] = None  # Made optional untuk compatibility dengan older records
+    jenis_kelamin: Optional[str] = None  # Made optional untuk compatibility
+    zscore_bbu: Optional[float] = None  # Made optional per case
+    zscore_tbu: Optional[float] = None  # Made optional per case
+    status_gizi: Optional[str] = None  # Made optional per case
+    prediksi_stunting: Optional[bool] = None  # Made optional per case
+    confidence_score: Optional[float] = None  # Made optional per case
     # Detail prediksi (optional, populated manually or via join if needed)
     # Tidak wajib ada di response standar list, tapi bisa ada di detail
     detail_prediksi: Optional[dict] = None  
-    tanggal_pengukuran: datetime
-    created_at: datetime
-    # Field legacy untuk backward compatibility (deprecated, gunakan status_gizi_label)
-    prediksi_stunting: Optional[bool] = None
+    tanggal_pengukuran: Optional[datetime] = None  # Made optional per case
+    created_at: Optional[datetime] = None  # Made optional per case
+
 
     class Config:
         from_attributes = True
+        extra = "allow"  # Allow extra fields from database response
 
 class PengukuranWithBalita(PengukuranResponse):
     """Model response pengukuran dengan data balita"""
-    balita_nama: str
-    balita_nik: str
+    balita_nama: Optional[str] = None
+    balita_nik: Optional[str] = None
     posyandu_id: Optional[int] = None
     posyandu_nama: Optional[str] = None

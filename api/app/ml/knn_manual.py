@@ -261,14 +261,12 @@ class ManualKNNClassifier:
         
         return int(predicted_class)
     
-    def predict(self, X: np.ndarray, exclude_indices: Optional[np.ndarray] = None) -> np.ndarray:
+    def predict(self, X: np.ndarray) -> np.ndarray:
         """
         Predict class for X
         
         Args:
             X: Query data (n_samples, n_features)
-            exclude_indices: Array of training indices to exclude per query (for Leave-One-Out)
-                            Shape (n_samples,) with index to exclude for each query
             
         Returns:
             Predicted labels (n_samples,)
@@ -281,20 +279,8 @@ class ManualKNNClassifier:
             # Calculate distances from query to all training samples
             distances = self._calculate_distances(query)
             
-            # If exclude_indices provided, set that distance to infinity
-            if exclude_indices is not None and i < len(exclude_indices):
-                exclude_idx = exclude_indices[i]
-                if exclude_idx >= 0:  # -1 means no exclusion
-                    distances[exclude_idx] = np.inf
-            
             # Find k nearest neighbors
             k_distances, k_indices = self._find_nearest_neighbors(distances)
-            
-            # Validate neighbors found
-            if len(k_indices) == 0:
-                # No neighbors found (all excluded), return most common class
-                predictions.append(int(np.bincount(self.y_train.astype(int)).argmax()))
-                continue
             
             # Get labels of k neighbors
             neighbor_labels = self.y_train[k_indices]
@@ -465,6 +451,9 @@ def calculate_confusion_matrix(
     
     # For each sample, increment the appropriate cell
     for true_label, pred_label in zip(y_true, y_pred):
+        # Convert numpy types to Python int if needed (fixing np.int64 type issue)
+        true_label = int(true_label)
+        pred_label = int(pred_label)
         true_idx = labels.index(true_label) if isinstance(labels, list) else np.where(labels == true_label)[0][0]
         pred_idx = labels.index(pred_label) if isinstance(labels, list) else np.where(labels == pred_label)[0][0]
         cm[true_idx, pred_idx] += 1
@@ -474,63 +463,93 @@ def calculate_confusion_matrix(
 
 def calculate_metrics(
     y_true: np.ndarray,
-    y_pred: np.ndarray
+    y_pred: np.ndarray,
+    labels: Optional[List[int]] = None
 ) -> Dict[str, float]:
     """
     Calculate classification metrics manually WITHOUT sklearn
+    Supports both binary and multi-class classification
     
     Metrics calculated:
-    - Accuracy: (TP + TN) / Total
-    - Precision (class 1): TP / (TP + FP)
-    - Recall/Sensitivity (class 1): TP / (TP + FN)
-    - Specificity (class 0): TN / (TN + FP)
-    - F1-Score (class 1): 2 * (Precision * Recall) / (Precision + Recall)
+    - Accuracy: (Correct predictions) / Total
+    - Per-class Precision, Recall, F1-Score (macro-averaged)
+    - Confusion Matrix for all classes
     
     Args:
         y_true: Ground truth labels
         y_pred: Predicted labels
+        labels: List of unique class labels (default: auto-detect)
         
     Returns:
         Dictionary of metrics
     """
+    # Determine labels
+    if labels is None:
+        labels = sorted(list(set(np.unique(y_true)) | set(np.unique(y_pred))))
+    
     # Calculate confusion matrix
-    cm = calculate_confusion_matrix(y_true, y_pred, labels=[0, 1])
+    cm = calculate_confusion_matrix(y_true, y_pred, labels=labels)
     
-    # Extract TP, TN, FP, FN for binary classification
-    TN = cm[0, 0]  # True Negative
-    FP = cm[0, 1]  # False Positive
-    FN = cm[1, 0]  # False Negative
-    TP = cm[1, 1]  # True Positive
+    n_classes = len(labels)
+    total = len(y_true)
     
-    # Calculate metrics
-    total = TP + TN + FP + FN
+    # Overall accuracy
+    accuracy = np.trace(cm) / total if total > 0 else 0
     
-    # Accuracy
-    accuracy = (TP + TN) / total if total > 0 else 0
+    # Per-class metrics (macro-averaged)
+    precision_per_class = []
+    recall_per_class = []
+    f1_per_class = []
     
-    # Precision
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
+    for i in range(n_classes):
+        tp = cm[i, i]
+        fp = cm[:, i].sum() - tp
+        fn = cm[i, :].sum() - tp
+        
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+        
+        precision_per_class.append(precision)
+        recall_per_class.append(recall)
+        f1_per_class.append(f1)
     
-    # Recall (Sensitivity)
-    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
+    # Macro-averaged metrics
+    precision = np.mean(precision_per_class)
+    recall = np.mean(recall_per_class)
+    f1_score = np.mean(f1_per_class)
     
-    # Specificity
-    specificity = TN / (TN + FP) if (TN + FP) > 0 else 0
+    # Calculate TP, TN, FP, FN per class
+    tp_per_class = []
+    tn_per_class = []
+    fp_per_class = []
+    fn_per_class = []
     
-    # F1-Score
-    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    for i in range(n_classes):
+        tp = cm[i, i]
+        fp = np.sum(cm[:, i]) - tp
+        fn = np.sum(cm[i, :]) - tp
+        tn = np.sum(cm) - tp - fp - fn
+        
+        tp_per_class.append(int(tp))
+        tn_per_class.append(int(tn))
+        fp_per_class.append(int(fp))
+        fn_per_class.append(int(fn))
     
     return {
         "accuracy": accuracy,
         "precision": precision,
         "recall": recall,
-        "specificity": specificity,
-        "f1_score": f1,
-        "tp": int(TP),
-        "tn": int(TN),
-        "fp": int(FP),
-        "fn": int(FN),
-        "confusion_matrix": cm
+        "specificity": 0,  # Not well-defined for multi-class
+        "f1_score": f1_score,
+        "tp_per_class": tp_per_class,
+        "tn_per_class": tn_per_class,
+        "fp_per_class": fp_per_class,
+        "fn_per_class": fn_per_class,
+        "confusion_matrix": cm,
+        "per_class_precision": [round(float(p), 4) for p in precision_per_class],
+        "per_class_recall": [round(float(r), 4) for r in recall_per_class],
+        "per_class_f1": [round(float(f), 4) for f in f1_per_class]
     }
 
 
@@ -543,25 +562,41 @@ def format_confusion_matrix_table(
     
     Args:
         cm: Confusion matrix (n_classes, n_classes)
-        labels: Class labels. Default: ['Normal', 'Stunting']
+        labels: Class labels. Default for 4-class: ['Normal+Baik', 'Normal+Kurang', 'Stunting+Baik', 'Stunting+Kurang']
         
     Returns:
         Formatted string representation
     """
+    n_classes = cm.shape[0]
+    
     if labels is None:
-        labels = ['Normal', 'Stunting']
+        if n_classes == 4:
+            labels = ['Normal+Baik', 'Normal+Kurang', 'Stunting+Baik', 'Stunting+Kurang']
+        elif n_classes == 2:
+            labels = ['Normal', 'Stunting']
+        else:
+            labels = [f'Class {i}' for i in range(n_classes)]
     
     # Build table
     lines = []
-    lines.append("\n" + "=" * 60)
+    lines.append("\n" + "=" * (20 + n_classes * 16))
     lines.append("CONFUSION MATRIX (Manual Calculation)")
-    lines.append("=" * 60)
-    lines.append(f"{'':20} {'Predicted Normal':>15} {'Predicted Stunting':>15}")
-    lines.append("-" * 60)
+    lines.append("=" * (20 + n_classes * 16))
     
+    # Header row
+    header = f"{'':20}"
+    for j in range(n_classes):
+        header += f" {'Pred ' + labels[j]:>14}"
+    lines.append(header)
+    lines.append("-" * (20 + n_classes * 16))
+    
+    # Data rows
     for i, true_label in enumerate(labels):
-        lines.append(f"Actual {true_label:12} {cm[i, 0]:>15} {cm[i, 1]:>15}")
+        row = f"Actual {true_label:12}"
+        for j in range(n_classes):
+            row += f" {int(cm[i, j]):>14}"
+        lines.append(row)
     
-    lines.append("=" * 60)
+    lines.append("=" * (20 + n_classes * 16))
     
     return "\n".join(lines)

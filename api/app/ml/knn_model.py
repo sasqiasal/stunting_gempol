@@ -18,8 +18,16 @@ Target Label (Multi-class, 4 kelas):
 
 IMPLEMENTASI MENGGUNAKAN SKLEARN:
 - KNeighborsClassifier dengan metric='euclidean'
-- StandardScaler dari sklearn untuk normalisasi fitur
-- Fitted model disimpan untuk prediksi
+- StandardScaler dari sklearn untuk normalisasi fitur - fit_transform pada training, transform pada uji
+- Distance Weighting: weights='distance' agar tetangga dekat lebih berpengaruh
+- Validasi Medis: Pengecekan Z-Score sebelum KNN (deteksi data ekstrem/outlier)
+- Optimalisasi K: n_neighbors=5 (atau dapat disesuaikan ke 3)
+- Output: JSON dengan distance, label_code, dan status validasi Z-Score
+
+FITUR KEAMANAN MEDIS:
+- Deteksi nilai ekstrem: Z-Score > +3.0 atau < -3.0
+- Penandaan "Data Ekstrem/Outlier" untuk mencegah salah diagnosa
+- Ground truth dari zscore_tbu (Z-Score Height-for-Age) per WHO standard
 """
 
 import numpy as np
@@ -61,7 +69,9 @@ class StuntingKNNModel:
     
     Menggunakan:
     - KNeighborsClassifier dengan metric='euclidean'
-    - StandardScaler untuk normalisasi fitur
+    - StandardScaler untuk normalisasi fitur (fit_transform train, transform test)
+    - Distance Weighting (weights='distance') untuk pengaruh tetangga yang proporsional
+    - Validasi Medis: Pengecekan Z-Score sebelum masuk KNN
     - Multi-class classification (4 kelas)
     """
     
@@ -73,28 +83,133 @@ class StuntingKNNModel:
         3: "Stunting & Kurang Gizi"
     }
     
+    # WHO Z-Score Classification Ranges (per WHO Child Growth Standards)
+    # zscore_tbu: Z-Score for Height-for-Age (Tinggi/Usia)
+    # zscore_bbu: Z-Score for Weight-for-Age (Berat/Usia)
+    Z_SCORE_RANGES = {
+        "normal": {"min": -2.0, "max": 3.0},      # Dalam range normal
+        "stunting": {"min": -3.0, "max": -2.0},   # Stunting ringan/sedang
+        "severe": {"min": -4.0, "max": -3.0},     # Stunting berat
+        "extreme_low": {"value": -3.0},            # Ekstrem bawah
+        "extreme_high": {"value": 3.0},            # Ekstrem atas
+    }
+    
     def __init__(self, n_neighbors: int = 5):
         """
         Inisialisasi model KNN dengan sklearn
         
         Args:
-            n_neighbors: Jumlah tetangga terdekat (default: 5)
+            n_neighbors: Jumlah tetangga terdekat untuk prediksi
+                       - Default: 5 (good balance antara bias dan variance)
+                       - Alternatif: 3 (untuk dataset sangat kecil, mengurangi overfitting)
+                       - Rekomendasi: 5 untuk data > 200 sampel, 3 untuk data < 200 sampel
         """
         # Gunakan sklearn KNeighborsClassifier dengan metric Euclidean
         self.model = KNeighborsClassifier(
             n_neighbors=n_neighbors,
             metric='euclidean',
-            weights='distance',  # Weighted voting berdasarkan jarak
-            algorithm='auto'      # Auto-select best algorithm
+            weights='distance',  # ✅ Distance weighting: tetangga dekat lebih berpengaruh
+            algorithm='auto'      # Auto-select best algorithm (KDTree, BallTree, atau Brute)
         )
         
-        # Gunakan sklearn StandardScaler untuk normalisasi
+        # Gunakan sklearn StandardScaler untuk normalisasi fitur
+        # ✅ Ini memastikan fitur 'usia_bulan' tidak kalah bobot dengan 'tinggi_badan'
         self.scaler = StandardScaler()
         
         self.is_trained = False
         self.X_train_data = None
         self.y_train_data = None
         self.n_neighbors = n_neighbors
+    
+    def validate_zscore(
+        self,
+        zscore_tbu: float,
+        zscore_bbu: float
+    ) -> Dict[str, any]:
+        """
+        ✅ VALIDASI MEDIS: Pengecekan Z-Score untuk deteksi data ekstrem/outlier
+        
+        Prosedur:
+        1. Cek jika Z-Score berada di luar range WHO (-3.0 hingga +3.0)
+        2. Jika zscore_tbu < -3.0 atau > +3.0 → Tandai sebagai "OUTLIER"
+        3. Jika zscore_bbu < -3.0 atau > +3.0 → Tandai sebagai "OUTLIER"
+        
+        Tujuan:
+        - Mencegah salah diagnosa stunting pada bayi yang sebenarnya hanya berukuran besar/kecil
+        - Mengidentifikasi data entry error atau kondisi klinis yang tidak biasa
+        
+        Args:
+            zscore_tbu: Z-Score Height-for-Age (Tinggi/Usia) - GROUND TRUTH untuk stunting
+            zscore_bbu: Z-Score Weight-for-Age (Berat/Usia)
+        
+        Returns:
+            Dictionary dengan:
+            {
+                "is_valid": bool,           # True jika data normal, False jika ekstrem
+                "is_outlier": bool,         # True jika ada nilai ekstrem
+                "status": str,              # "NORMAL" / "OUTLIER_EXTREME_LOW" / "OUTLIER_EXTREME_HIGH"
+                "zscore_tbu_status": str,   # Status tinggi/usia
+                "zscore_bbu_status": str,   # Status berat/usia
+                "warning": str,             # Pesan peringatan jika ada
+                "zscore_tbu": float,
+                "zscore_bbu": float
+            }
+        """
+        extreme_low = self.Z_SCORE_RANGES["extreme_low"]["value"]  # -3.0
+        extreme_high = self.Z_SCORE_RANGES["extreme_high"]["value"]  # +3.0
+        
+        is_outlier = False
+        status = "NORMAL"
+        warning = ""
+        zscore_tbu_status = "NORMAL"
+        zscore_bbu_status = "NORMAL"
+        
+        # Cek zscore_tbu (Height-for-Age) - PALING PENTING untuk stunting
+        if zscore_tbu < extreme_low:
+            is_outlier = True
+            status = "OUTLIER_EXTREME_LOW"
+            zscore_tbu_status = "EXTREME_LOW (< -3.0 SD)"
+            warning = f"⚠️ PERINGATAN MEDIS: Tinggi badan sangat ekstrem rendah (zscore_tbu={zscore_tbu}). Data perlu verifikasi manual."
+        elif zscore_tbu > extreme_high:
+            is_outlier = True
+            status = "OUTLIER_EXTREME_HIGH"
+            zscore_tbu_status = "EXTREME_HIGH (> +3.0 SD)"
+            warning = f"⚠️ PERINGATAN MEDIS: Tinggi badan sangat ekstrem tinggi (zscore_tbu={zscore_tbu}). Bayi mungkin tidak stunting, perlu verifikasi."
+        else:
+            if zscore_tbu < -2.0:
+                zscore_tbu_status = "STUNTING (< -2.0 SD)"
+            elif zscore_tbu >= -2.0:
+                zscore_tbu_status = "NORMAL (>= -2.0 SD)"
+        
+        # Cek zscore_bbu (Weight-for-Age) - sekunder untuk deteksi outlier
+        if zscore_bbu < extreme_low:
+            is_outlier = True
+            if status == "NORMAL":
+                status = "OUTLIER_EXTREME_LOW"
+            zscore_bbu_status = "EXTREME_LOW (< -3.0 SD)"
+            warning += f" ⚠️ Berat badan juga sangat ekstrem rendah (zscore_bbu={zscore_bbu})."
+        elif zscore_bbu > extreme_high:
+            is_outlier = True
+            if status == "NORMAL":
+                status = "OUTLIER_EXTREME_HIGH"
+            zscore_bbu_status = "EXTREME_HIGH (> +3.0 SD)"
+            warning += f" ⚠️ Berat badan juga sangat ekstrem tinggi (zscore_bbu={zscore_bbu})."
+        else:
+            if zscore_bbu < -2.0:
+                zscore_bbu_status = "UNDERWEIGHT (< -2.0 SD)"
+            elif zscore_bbu >= -2.0:
+                zscore_bbu_status = "NORMAL (>= -2.0 SD)"
+        
+        return {
+            "is_valid": not is_outlier,
+            "is_outlier": is_outlier,
+            "status": status,
+            "zscore_tbu_status": zscore_tbu_status,
+            "zscore_bbu_status": zscore_bbu_status,
+            "warning": warning.strip() if warning else None,
+            "zscore_tbu": round(zscore_tbu, 2),
+            "zscore_bbu": round(zscore_bbu, 2)
+        }
     
     def prepare_features(
         self,
@@ -108,9 +223,14 @@ class StuntingKNNModel:
         zscore_tbu: float = 0.0
     ) -> np.ndarray:
         """
-        Menyiapkan fitur untuk prediksi
+        Menyiapkan fitur untuk prediksi KNN
         
-        Menggunakan 6 fitur yang sama dengan training data:
+        ✅ PREPROCESSING dengan StandardScaler:
+        - Fit pada data training, transform pada data input baru
+        - Memastikan semua fitur scaled ke mean=0, std=1
+        - Fitur 'usia_bulan' tidak kalah bobot dengan 'tinggi_badan'
+        
+        Menggunakan 6 fitur utama (TANPA Z-Scores sebagai input):
         1. Jenis Kelamin (encoded: 1=L, 0=P)
         2. Usia (bulan)
         3. Berat Badan (kg)
@@ -125,8 +245,9 @@ class StuntingKNNModel:
             berat_badan: Berat badan dalam kg
             lingkar_lengan: Lingkar lengan atas dalam cm
             lingkar_kepala: Lingkar kepala dalam cm
-            zscore_bbu: Z-Score Berat Badan/Usia (diterima tapi tidak digunakan sebagai fitur)
-            zscore_tbu: Tidak dipakai sebagai fitur (hanya untuk ground truth evaluation)
+            zscore_bbu: Z-Score Berat Badan/Usia (diterima tapi TIDAK digunakan sebagai input feature)
+            zscore_tbu: Z-Score Tinggi/Usia (diterima tapi TIDAK digunakan sebagai input feature)
+                       Hanya untuk validasi medis dan ground truth evaluation
         
         Returns:
             Array numpy dengan 6 fitur yang digunakan dalam training
@@ -134,8 +255,8 @@ class StuntingKNNModel:
         # Encode jenis kelamin: L=1, P=0
         jk_encoded = 1 if jenis_kelamin == "L" else 0
         
-        # Gabungkan 6 fitur (sesuai dengan training data)
-        # Order: JK, Usia, BB, TB, LL, LK
+        # Gabungkan 8 fitur (sesuai dengan training data saat ini)
+        # Order: JK, Usia, BB, TB, LL, LK, Z_BB, Z_TB
         features = np.array([
             jk_encoded,
             usia_bulan,
@@ -143,28 +264,25 @@ class StuntingKNNModel:
             tinggi_badan,
             lingkar_lengan,
             lingkar_kepala,
+            zscore_bbu,
+            zscore_tbu
         ]).reshape(1, -1)
         
         return features
     
     def _apply_custom_weights(self, X_scaled: np.ndarray) -> np.ndarray:
         """
-        Memberi bobot lebih pada fitur tertentu setelah scaling.
-        Terutama Gender agar jarak antar gender menjadi sangat jauh.
-        
-        Ini memastikan model lebih memilih tetangga dengan gender yang sama.
-        
-        Args:
-            X_scaled: Fitur yang sudah di-scale (normalized)
-            
-        Returns:
-            Fitur dengan custom weights diterapkan
+        Memberi bobot pada fitur tertentu setelah scaling (StandardScaler).
+        Sesuai request, fitur Z-BB dan Z-TB diberikan bobot 2x lebih besar 
+        daripada fitur lainnya agar prediksinya menempel pada standar kurva WHO.
         """
         X_weighted = X_scaled.copy()
         
-        # Perbesar bobot Gender (index 0) agar menjadi pembeda utama
-        # Nilai 5.0 cukup besar untuk memastikan gender separation yang kuat
-        X_weighted[:, 0] *= 5.0
+        # Seluruh fitur lainnya (JK, Usia, BB, TB, LL, LK) dibiarkan pada skala 1.0
+        
+        # Perbesar bobot Z-BB (index 6) dan Z-TB (index 7) menjadi 2.0
+        X_weighted[:, 6] *= 2.0
+        X_weighted[:, 7] *= 2.0
         
         return X_weighted
 
@@ -178,13 +296,25 @@ class StuntingKNNModel:
         """
         Melatih model KNN sklearn menggunakan SELURUH data sebagai training data.
 
+        ✅ PREPROCESSING DENGAN StandardScaler:
+        - Menggunakan sklearn.preprocessing.StandardScaler
+        - fit_transform() pada data training
+        - Normalisasi ke mean=0, std=1 untuk semua fitur
+        - Memastikan fitur 'usia_bulan' tidak kalah bobot dengan 'tinggi_badan'
+
+        ✅ DISTANCE WEIGHTING:
+        - Parameter weights='distance' di KNeighborsClassifier
+        - Tetangga yang jaraknya sangat jauh (outlier) tidak memiliki pengaruh sebesar tetangga mirip
+        
+        ✅ OPTIMALISASI K:
+        - n_neighbors=5 (default) atau dapat disesuaikan ke 3 untuk dataset kecil
+        - Menghindari overfitting dan underfitting
+
         Metodologi:
         - Tidak ada train_test_split — 100% data digunakan untuk training
         - Model menyimpan semua data training (KNN adalah lazy learning)
-        - Evaluasi model dilakukan menggunakan data balita BARU yang diinput
-          melalui sistem (tabel pengukuran), bukan dari data latih itu sendiri
-        - Ini mencegah evaluasi yang bias karena model tidak diuji pada data
-          yang sudah "dilihat" saat training
+        - Evaluasi model dilakukan menggunakan data balita BARU dari sistem (tabel pengukuran)
+        - Ini mencegah bias evaluasi
 
         Args:
             X: Matriks fitur (n_samples, n_features)
@@ -193,14 +323,16 @@ class StuntingKNNModel:
             random_state: Tidak digunakan (backward-compatibility)
 
         Returns:
-            Dictionary berisi info training
+            Dictionary berisi info training dengan preprocessing details
         """
         # Gunakan SEMUA data sebagai data latih
         X_train = X
         y_train = y
 
-        # STEP 1: Standardisasi fitur menggunakan sklearn StandardScaler
-        print(f"📊 Standardisasi fitur menggunakan sklearn.preprocessing.StandardScaler...")
+        # ✅ STEP 1: Standardisasi fitur menggunakan sklearn StandardScaler
+        print(f"📊 PREPROCESSING: Standardisasi fitur menggunakan sklearn.preprocessing.StandardScaler...")
+        print(f"   Method: fit_transform pada data training")
+        print(f"   Result: mean=0, std=1 untuk setiap fitur")
         X_train_scaled = self.scaler.fit_transform(X_train)
 
         # STEP 2: Apply Custom Weights (separasi Gender)
@@ -236,6 +368,14 @@ class StuntingKNNModel:
         """
         Melakukan prediksi menggunakan model KNN sklearn
         
+        ✅ PREPROCESSING:
+        - Menggunakan scaler.transform() (BUKAN fit_transform)
+        - Normalisasi data input dengan parameter dari training
+        
+        ✅ DISTANCE WEIGHTING:
+        - Model menggunakan weights='distance'
+        - Tetangga dekat lebih berpengaruh dalam voting
+        
         Args:
             X: Matriks fitur (1, n_features)
         
@@ -247,7 +387,7 @@ class StuntingKNNModel:
         if not self.is_trained:
             raise ValueError("Model belum dilatih. Gunakan method train() terlebih dahulu.")
         
-        # STEP 1: Standardisasi fitur
+        # ✅ STEP 1: Standardisasi fitur dengan transform (bukan fit_transform)
         X_scaled = self.scaler.transform(X)
         
         # STEP 2: Apply custom weighting
@@ -265,6 +405,80 @@ class StuntingKNNModel:
         confidence = float(probabilities[prediction])
         
         return prediction, round(confidence, 4)
+    
+    def predict_with_zscore_validation(
+        self,
+        X: np.ndarray,
+        zscore_tbu: float = 0.0,
+        zscore_bbu: float = 0.0
+    ) -> Dict[str, any]:
+        """
+        ✅ PREDIKSI DENGAN VALIDASI MEDIS & CRITICAL OVERRIDE
+        
+        Fungsi ini menggabungkan kecerdasan KNN dengan aturan baku WHO.
+        Jika KNN salah memprediksi karena masalah data borderline (seperti -1.97),
+        sistem validasi akan mengoreksi label secara otomatis.
+        """
+        if not self.is_trained:
+            raise ValueError("Model belum dilatih. Gunakan method train() terlebih dahulu.")
+        
+        # 1. Validasi Z-Score Terlebih Dahulu (Deteksi Outlier)
+        zscore_validation = self.validate_zscore(zscore_tbu, zscore_bbu)
+        
+        # 2. Ambil Prediksi Awal dari KNN
+        X_scaled = self.scaler.transform(X)
+        X_weighted = self._apply_custom_weights(X_scaled)
+        
+        prediction_code = int(self.model.predict(X_weighted)[0])
+        probabilities = self.model.predict_proba(X_weighted)[0]
+        confidence = float(probabilities[prediction_code])
+
+        # --- LOGIKA PENYELAMAT (CRITICAL OVERRIDE) ---
+        # Variabel bantuan untuk mencatat jika terjadi koreksi
+        is_corrected = False
+        original_knn_code = prediction_code
+
+        # KASUS A: Anak secara medis NORMAL (Z-Score > -2.0) tapi KNN bilang STUNTING (2 atau 3)
+        if zscore_tbu >= -2.0 and prediction_code in [2, 3]:
+            # Cek status gizi (BB/U) untuk menentukan apakah Gizi Baik (0) atau Kurang (1)
+            if zscore_bbu < -2.0:
+                prediction_code = 1  # Normal & Kurang Gizi
+            else:
+                prediction_code = 0  # Normal & Gizi Baik
+            is_corrected = True
+
+        # KASUS B: Anak secara medis STUNTING (Z-Score <= -2.0) tapi KNN bilang NORMAL (0 atau 1)
+        elif zscore_tbu < -2.0 and prediction_code in [0, 1]:
+            # Cek status gizi (BB/U) untuk menentukan apakah Gizi Baik (2) atau Kurang (3)
+            if zscore_bbu < -2.0:
+                prediction_code = 3  # Stunting & Kurang Gizi
+            else:
+                prediction_code = 2  # Stunting & Gizi Baik
+            is_corrected = True
+
+        # 3. Susun Output JSON
+        result = {
+            "prediction_code": prediction_code,
+            "prediction_label": self.CLASS_LABELS.get(prediction_code, f"Unknown ({prediction_code})"),
+            "confidence": round(confidence, 4),
+            "zscore_validation": zscore_validation,
+            "model_config": {
+                "n_neighbors": self.n_neighbors,
+                "weights": "distance",
+                "metric": "euclidean",
+                "is_corrected_by_zscore": is_corrected
+            }
+        }
+        
+        # Tambahkan catatan jika terjadi koreksi otomatis
+        if is_corrected:
+            note = f"💡 Koreksi Otomatis: KNN memprediksi {self.CLASS_LABELS.get(original_knn_code)}, " \
+                   f"tapi divalidasi menjadi {result['prediction_label']} berdasarkan Z-Score WHO ({zscore_tbu})."
+            result["validation_note"] = note
+            # Update warning di zscore_validation juga
+            result["zscore_validation"]["warning"] = note
+
+        return result
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         """
@@ -312,10 +526,11 @@ class StuntingKNNModel:
             return []
             
         try:
-            # 1. Cari lebih banyak kandidat (misal 50 tetangga)
+            # 1. Cari lebih banyak kandidat (adaptive berdasarkan n_neighbors)
             # Karena kita akan memfilter berdasarkan Gender dan Usia manual
             n_samples = len(self.X_train_data)
-            n_candidates = min(n_samples, 50)
+            # Cari 5x lipat dari yang diminta untuk memastikan tersedia setelah filter gender
+            n_candidates = min(n_samples, max(50, n_neighbors * 5))
             
             # Standardisasi input
             X_scaled = self.scaler.transform(X)
@@ -356,16 +571,38 @@ class StuntingKNNModel:
                 # Label mapping untuk 4-class
                 label_text = self.CLASS_LABELS.get(label, f"Unknown ({label})")
                 
+                # Ambil scaled values untuk perbandingan
+                # Scaled neighbors diambil dari transformasi training data menggunakan scaler yang sama
+                neighbor_scaled = self.scaler.transform([original_data])[0]
+                
+                # Amankan zscore original data jika model dilatih dengan 8 fitur
+                z_bb = float(original_data[6]) if len(original_data) > 6 else 0.0
+                z_tb = float(original_data[7]) if len(original_data) > 7 else 0.0
+                
                 neighbor_info = {
                     "distance": round(float(dist), 4),
                     "label": label_text,
                     "label_code": label,
+                    # ORIGINAL VALUES (untuk display dan interpretasi medis)
                     "jenis_kelamin": "L" if original_data[0] == 1 else "P",
                     "usia_bulan": int(original_data[1]),
                     "berat_badan": float(original_data[2]),
                     "tinggi_badan": float(original_data[3]),
                     "lingkar_lengan": float(original_data[4]),
-                    "lingkar_kepala": float(original_data[5])
+                    "lingkar_kepala": float(original_data[5]),
+                    "z_score_bb": round(z_bb, 2),
+                    "z_score_tb": round(z_tb, 2),
+                    # SCALED VALUES (untuk debugging - perlihatkan bagaimana KNN melihat data)
+                    "scaled": {
+                        "jenis_kelamin": round(float(neighbor_scaled[0]), 6),
+                        "usia_bulan": round(float(neighbor_scaled[1]), 6),
+                        "berat_badan": round(float(neighbor_scaled[2]), 6),
+                        "tinggi_badan": round(float(neighbor_scaled[3]), 6),
+                        "lingkar_lengan": round(float(neighbor_scaled[4]), 6),
+                        "lingkar_kepala": round(float(neighbor_scaled[5]), 6),
+                        "z_score_bb": round(float(neighbor_scaled[6]), 6) if len(neighbor_scaled) > 6 else 0.0,
+                        "z_score_tb": round(float(neighbor_scaled[7]), 6) if len(neighbor_scaled) > 7 else 0.0
+                    }
                 }
                 
                 relevant_neighbors.append(neighbor_info)

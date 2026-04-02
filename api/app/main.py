@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
-from app.routes import auth, balita, pengukuran, posyandu, evaluasi, akun, k_parameter_evaluation, knn_kader_evaluation, knn_global_evaluation, neighbors_by_k
-# from app.routes import laporan  # Disabled: SQLAlchemy incompatibility with Python 3.13
+from app.routes import auth, balita, pengukuran, posyandu, evaluasi, akun, neighbors_by_k
 from app.ml.knn_model import knn_model
 import os
 
@@ -36,17 +35,17 @@ app.include_router(posyandu.router, prefix="/api/v1", tags=["Posyandu"])
 app.include_router(evaluasi.router, prefix="/api/v1", tags=["Evaluasi Model"])
 app.include_router(akun.router, prefix="/api/v1", tags=["Manajemen Akun"])
 app.include_router(neighbors_by_k.router, prefix="/api/v1", tags=["Neighbors"])
-app.include_router(k_parameter_evaluation.router, prefix="/api/v1", tags=["K Parameter Evaluation"])
-app.include_router(knn_kader_evaluation.router, prefix="/api/v1", tags=["KNN Kader Evaluation"])
-app.include_router(knn_global_evaluation.router, prefix="/api/v1", tags=["KNN Global Evaluation"])
-# app.include_router(laporan.router, prefix="/api/v1", tags=["Laporan Export"])  # Disabled: SQLAlchemy incompatibility
+# Rute di bawah dinonaktifkan sementara karena modul evaluasinya telah direfactor
+# app.include_router(k_parameter_evaluation.router)
+# app.include_router(knn_kader_evaluation.router)
+# app.include_router(knn_global_evaluation.router)
 
 @app.on_event("startup")
 async def startup_event():
     print("Starting up KNN Model...")
     # Load model if exists
     try:
-        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ml", "models", "knn_stunting_model.pkl")
+        model_path = "app/ml/models/knn_stunting_model.pkl"
         if os.path.exists(model_path):
             knn_model.load_model(model_path)
             print("KNN Model Loaded Successfully.")

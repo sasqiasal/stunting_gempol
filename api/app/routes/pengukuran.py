@@ -19,7 +19,6 @@ router = APIRouter(prefix="/pengukuran", tags=["Pengukuran"])
 @router.get("/statistik/summary")
 async def get_statistik_summary(
     posyandu_id: Optional[int] = None,
-    current_user: dict = Depends(get_current_user),
     supabase_client = Depends(get_supabase)
 ):
     """
@@ -29,16 +28,9 @@ async def get_statistik_summary(
         # 1. Total Balita
         query_balita = supabase_client.table("balita").select("id", count="exact")
         
-        # Filter by role or param
-        if current_user["role"] == "kader":
-            # Kader hanya lihat posyandu dia
-            # Perlu ambil posyandu_id dari tabel kader/user? 
-            # Asumsi: posyandu_id dikirim dari frontend atau ambil dari user profile
-            # Untuk simplifikasi, jika param posyandu_id ada, gunakan.
-            if posyandu_id:
-                query_balita = query_balita.eq("posyandu_id", posyandu_id)
-        elif posyandu_id:
-             query_balita = query_balita.eq("posyandu_id", posyandu_id)
+        # Filter by posyandu_id if provided
+        if posyandu_id:
+            query_balita = query_balita.eq("posyandu_id", posyandu_id)
              
         res_balita = query_balita.execute()
         total_balita = res_balita.count or 0
@@ -47,9 +39,7 @@ async def get_statistik_summary(
         query_stunting = supabase_client.table("balita").select("id", count="exact")\
             .ilike("status_terkini", "%stunt%")
             
-        if current_user["role"] == "kader" and posyandu_id:
-            query_stunting = query_stunting.eq("posyandu_id", posyandu_id)
-        elif posyandu_id:
+        if posyandu_id:
             query_stunting = query_stunting.eq("posyandu_id", posyandu_id)
             
         res_stunting = query_stunting.execute()
@@ -100,7 +90,6 @@ async def get_statistik_summary(
 
 @router.get("/riwayat-stunting")
 async def get_riwayat_stunting(
-    current_user: dict = Depends(get_current_user),
     supabase_client = Depends(get_supabase)
 ):
     """
@@ -207,12 +196,11 @@ async def create_pengukuran(
     
     Flow:
     1. Ambil data balita
-    2. Validasi tanggal pengukuran (harus dalam 3 bulan + bulan saat ini ke belakang)
-    3. Hitung usia saat pengukuran
-    4. Hitung Z-Score BB/U dan TB/U
-    5. Prediksi stunting menggunakan model KNN
-    6. Simpan ke database
-    7. Update status_terkini di tabel balita
+    2. Hitung usia saat pengukuran
+    3. Hitung Z-Score BB/U dan TB/U
+    4. Prediksi stunting menggunakan model KNN
+    5. Simpan ke database
+    6. Update status_terkini di tabel balita
     """
     # 1. Ambil data balita
     balita_response = supabase_client.table("balita").select("*").eq("id", pengukuran_data.balita_id).execute()
@@ -248,7 +236,12 @@ async def create_pengukuran(
     
     # 3. Hitung usia saat pengukuran
     tanggal_lahir = date.fromisoformat(balita["tanggal_lahir"])
-    usia_bulan = calculate_age_in_months(tanggal_lahir, tgl_ukur)
+    # Gunakan usia_bulan dari frontend jika ada, atau hitung dari tanggal_lahir
+    if pengukuran_data.usia_bulan is not None:
+        usia_bulan = pengukuran_data.usia_bulan
+    else:
+        # Gunakan tanggal pengukuran yang dikirim (untuk input retroaktif), default hari ini
+        usia_bulan = calculate_age_in_months(tanggal_lahir, tgl_ukur)
     jenis_kelamin = balita["jenis_kelamin"]
     
     # 4. Prediksi stunting (termasuk kalkulasi Z-Score)
@@ -264,36 +257,38 @@ async def create_pengukuran(
     # 5. Siapkan data untuk disimpan
     pengukuran_dict = pengukuran_data.model_dump()
     
-    # Determine prediksi_stunting boolean from 4-class label for backward compatibility
-    status_gizi_label = int(prediksi_result["status_gizi_label"])
-    is_stunting = status_gizi_label in [2, 3]  # Labels 2,3 = Stunting
-    
-    pengukuran_dict.update({
-        "kader_id": current_user["id"],
-        "usia_bulan": usia_bulan,
-        "jenis_kelamin": jenis_kelamin,
-        "zscore_bbu": float(prediksi_result["zscore_bbu"]),
-        "zscore_tbu": float(prediksi_result["zscore_tbu"]),
-        # Status gizi sekarang menggunakan 4 kelas dari model KNN
-        "status_gizi": prediksi_result["status_gizi"],
-        # Keep prediksi_stunting for backward compatibility (True=stunting, False=normal)
-        "prediksi_stunting": is_stunting,
-        # Label klasifikasi integer (0, 1, 2, 3) - will be stored when DB is updated
-        # For now, keep it in detail_prediksi only
-        "confidence_score": float(prediksi_result["confidence_score"]),
-        # Gunakan tanggal pengukuran yang dikirim (retroaktif) atau waktu sekarang
-        "tanggal_pengukuran": datetime.combine(tgl_ukur, datetime.min.time()).astimezone().isoformat(),
-        "created_at": datetime.now().astimezone().isoformat(),
-        # Simpan detail prediksi (termasuk nearest_neighbors dan label 4 kelas)
-        "detail_prediksi": {
-            "status_gizi_label": status_gizi_label,
-            "nearest_neighbors": prediksi_result.get("nearest_neighbors", []),
-            "version": "2.0", 
-            "model": "KNN-4Class",
-            "k": 5,
-            "classes": ["Normal + Gizi Baik", "Normal + Kurang Gizi", "Stunting + Gizi Baik", "Stunting + Kurang Gizi"]
-        }
-    })
+    try:
+        print(f"DEBUG CREATE: Preparing data for balita {pengukuran_data.balita_id}")
+        print(f"  Prediction result keys: {prediksi_result.keys()}")
+        print(f"  prediksi_stunting type: {type(prediksi_result['prediksi_stunting'])}, value: {prediksi_result['prediksi_stunting']}")
+        
+        prediksi_stunting_bool = int(prediksi_result["prediksi_stunting"]) >= 2
+        print(f"  Converted to boolean: {prediksi_stunting_bool}")
+        
+        pengukuran_dict.update({
+            "kader_id": current_user["id"],
+            "usia_bulan": usia_bulan,
+            "jenis_kelamin": jenis_kelamin,
+            "zscore_bbu": float(prediksi_result["zscore_bbu"]),
+            "zscore_tbu": float(prediksi_result["zscore_tbu"]),
+            "status_gizi": prediksi_result["status_gizi"],
+            "prediksi_stunting": prediksi_stunting_bool,  # Convert to boolean for DB
+            "confidence_score": float(prediksi_result["confidence_score"]),
+            # Gunakan tanggal pengukuran yang dikirim (retroaktif) atau waktu sekarang
+            "tanggal_pengukuran": datetime.combine(tgl_ukur, datetime.min.time()).astimezone().isoformat(),
+            "created_at": datetime.now().astimezone().isoformat(),
+            # Simpan detail prediksi (termasuk nearest_neighbors)
+            "detail_prediksi": {
+                "nearest_neighbors": prediksi_result.get("nearest_neighbors", []),
+                "version": "1.0", 
+                "model": "KNN",
+                "k": 5
+            }
+        })
+        print(f"  Updated dict with all fields")
+    except Exception as e:
+        print(f"ERROR in data preparation: {e}")
+        raise HTTPException(status_code=500, detail=f"Error preparing data: {str(e)}")
     
     # Convert float values to ensure JSON serialization
     for key in ["tinggi_badan", "berat_badan", "lingkar_lengan", "lingkar_kepala"]:
@@ -340,21 +335,17 @@ async def create_pengukuran(
     pengukuran = pengukuran_new
     
     # 6. Update status_terkini di tabel balita
-    supabase_client.table("balita").update({
-        "status_terkini": prediksi_result["status_gizi"],
-        "usia_bulan": usia_bulan
-    }).eq("id", pengukuran_data.balita_id).execute()
+    try:
+        supabase_client.table("balita").update({
+            "status_terkini": prediksi_result["status_gizi"],
+            "usia_bulan": usia_bulan
+        }).eq("id", pengukuran_data.balita_id).execute()
+        print(f"✅ Updated balita status_terkini for balita {pengukuran_data.balita_id}")
+    except Exception as e:
+        print(f"⚠️ Error updating balita: {e}")
+        # Tidak raise error, balita update adalah secondary action
     
-    # Add status_gizi_label to response (required by response model)
-    STATUS_GIZI_MAPPING = {
-        "Normal + Gizi Baik": 0,
-        "Normal + Kurang Gizi": 1,
-        "Stunting + Gizi Baik": 2,
-        "Stunting + Kurang Gizi": 3,
-    }
-    status_gizi = pengukuran.get("status_gizi", "Normal")
-    pengukuran["status_gizi_label"] = STATUS_GIZI_MAPPING.get(status_gizi, 0)
-    
+    print(f"✅ Successfully created pengukuran ID {pengukuran_id}")
     return pengukuran
 
 @router.put("/{id}", response_model=PengukuranResponse)
@@ -407,10 +398,6 @@ async def update_pengukuran(
     )
 
     # 5. Update tabel pengukuran
-    # Determine stunting status from 4-class label for backward compatibility  
-    status_gizi_label = int(prediksi_result["status_gizi_label"])
-    is_stunting = status_gizi_label in [2, 3]  # Labels 2,3 = Stunting
-    
     update_dict = {
         "tinggi_badan": float(pengukuran_data.tinggi_badan),
         "berat_badan": float(pengukuran_data.berat_badan),
@@ -420,19 +407,25 @@ async def update_pengukuran(
         "usia_bulan": usia_bulan,
         "zscore_bbu": float(prediksi_result["zscore_bbu"]),
         "zscore_tbu": float(prediksi_result["zscore_tbu"]),
-        # Status gizi menggunakan 4 kelas dari model KNN
         "status_gizi": prediksi_result["status_gizi"],
-        # Keep prediksi_stunting for backward compatibility
-        "prediksi_stunting": is_stunting,
+        "prediksi_stunting": int(prediksi_result["prediksi_stunting"]) >= 2,  # Convert to boolean for DB
         "confidence_score": float(prediksi_result["confidence_score"]),
     }
 
     try:
+        print(f"DEBUG UPDATE: Updating pengukuran ID {id}")
+        print(f"  prediksi_stunting raw: {prediksi_result['prediksi_stunting']} (type: {type(prediksi_result['prediksi_stunting'])})")
+        print(f"  update_dict keys: {update_dict.keys()}")
+        
         response = supabase_client.table("pengukuran").update(update_dict).eq("id", id).execute()
+        
         if not response.data:
+            print(f"ERROR UPDATE: No data returned from update. Response: {response}")
             raise HTTPException(status_code=500, detail="Gagal mengupdate data pengukuran")
 
         updated_pengukuran = response.data[0]
+        print(f"✅ Update successful for ID {id}")
+        print(f"  Returned fields: {updated_pengukuran.keys() if isinstance(updated_pengukuran, dict) else 'not a dict'}")
 
         # 6. Update atau insert ke tabel evaluasi_model_knn
         evaluasi_data = {
@@ -472,16 +465,6 @@ async def update_pengukuran(
         print(f"⚠️ Error updating pengukuran: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Terjadi kesalahan: {str(e)}")
 
-    # Add status_gizi_label to response (required by response model)
-    STATUS_GIZI_MAPPING = {
-        "Normal + Gizi Baik": 0,
-        "Normal + Kurang Gizi": 1,
-        "Stunting + Gizi Baik": 2,
-        "Stunting + Kurang Gizi": 3,
-    }
-    status_gizi = updated_pengukuran.get("status_gizi", "Normal")
-    updated_pengukuran["status_gizi_label"] = STATUS_GIZI_MAPPING.get(status_gizi, 0)
-    
     return updated_pengukuran
 
 @router.get("/{id}/detail-evaluasi", response_model=Dict[str, Any])
@@ -532,7 +515,7 @@ async def get_detail_evaluasi(
 @router.get("/", response_model=List[PengukuranWithBalita])
 async def get_all_pengukuran(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=10000),
+    limit: int = Query(100, ge=1, le=99999),
     balita_id: Optional[int] = None,
     posyandu_id: Optional[int] = None,
     prediksi_stunting: Optional[bool] = None,
@@ -561,8 +544,7 @@ async def get_all_pengukuran(
         if balita_id:
             query = query.eq("balita_id", balita_id)
         
-        # Filter berdasarkan status stunting (backward compatible)
-        # For now, use prediksi_stunting column; will migrate to status_gizi_label after DB update
+        # Filter berdasarkan prediksi stunting
         if prediksi_stunting is not None:
             query = query.eq("prediksi_stunting", prediksi_stunting)
         
@@ -585,29 +567,17 @@ async def get_all_pengukuran(
             except (ValueError, IndexError) as e:
                 print(f"⚠️ Invalid bulan format: {bulan}, ignoring filter")
         
-        # Pagination
-        query = query.range(skip, skip + limit - 1).order("tanggal_pengukuran", desc=True)
+        # Pagination & Ordering
+        # Sort by: 1) tanggal_pengukuran DESC, 2) created_at DESC (untuk data same-day)
+        query = query.range(skip, skip + limit - 1).order("tanggal_pengukuran", desc=True).order("created_at", desc=True)
         
         response = query.execute()
         print(f"✅ Query executed successfully, got {len(response.data)} records")
         
         # Transform data untuk response
-        # Classification mapping for status_gizi_label
-        STATUS_GIZI_MAPPING = {
-            "Normal + Gizi Baik": 0,
-            "Normal + Kurang Gizi": 1,
-            "Stunting + Gizi Baik": 2,
-            "Stunting + Kurang Gizi": 3,
-        }
-        
         results = []
         for item in response.data:
             result = {**item}
-            
-            # Add status_gizi_label based on status_gizi string
-            # This is required by the response model
-            status_gizi = result.get("status_gizi", "Normal")
-            result["status_gizi_label"] = STATUS_GIZI_MAPPING.get(status_gizi, 0)
             
             # Flatten data balita
             if "balita" in item and item["balita"]:
@@ -682,7 +652,7 @@ async def get_statistik_summary(
     total_response = query.execute()
     total_pengukuran = total_response.count or 0
     
-    # Query untuk stunting (using prediksi_stunting for backward compatibility)
+    # Query untuk stunting
     stunting_query = supabase_client.table("pengukuran").select("*", count="exact").eq("prediksi_stunting", True)
     
     if posyandu_id:
@@ -722,7 +692,7 @@ async def get_riwayat_stunting(
     now = datetime.now()
     six_months_ago = now - timedelta(days=180)  # Approx 6 bulan
     
-    # Query pengukuran dengan filter stunting (prediksi_stunting=true) dan 6 bulan terakhir
+    # Query pengukuran dengan filter stunting = true dan 6 bulan terakhir
     query = supabase_client.table("pengukuran").select(
         "id, tanggal_pengukuran, prediksi_stunting, balita:balita_id(posyandu_id)"
     ).eq("prediksi_stunting", True).gte("tanggal_pengukuran", six_months_ago.isoformat())

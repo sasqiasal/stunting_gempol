@@ -142,7 +142,6 @@ WHO_WFA_GIRLS = {
     60: {"L": -0.3518, "M": 18.2193, "S": 0.14821}
 }
 
-
 # Data standar WHO untuk TB/U (Tinggi Badan per Usia) dalam bulan 0-60
 
 WHO_HFA_LENGTH_BOYS = {
@@ -281,9 +280,6 @@ WHO_HFA_HEIGHT_GIRLS = {
     60: {"L": 1.0, "M": 109.4233, "S": 0.04347}
 }
 
-WHO_HFA_BOYS = {**WHO_HFA_LENGTH_BOYS, **WHO_HFA_HEIGHT_BOYS}
-WHO_HFA_GIRLS = {**WHO_HFA_LENGTH_GIRLS, **WHO_HFA_HEIGHT_GIRLS}
-
 def get_lms_parameters(age_months: int, reference_data: dict) -> Tuple[float, float, float]:
     """
     Dapatkan nilai L, M, S langsung dari tabel WHO tanpa interpolasi.
@@ -307,33 +303,26 @@ def get_lms_parameters(age_months: int, reference_data: dict) -> Tuple[float, fl
 
 def calculate_zscore_lms(value: float, L: float, M: float, S: float) -> float:
     """
-    Menghitung Z-Score dengan penyesuaian Modified Z-Score untuk nilai ekstrem.
+    Menghitung Z-Score menggunakan metode LMS (WHO Child Growth Standards),
+    lengkap dengan penyesuaian Modified Z-Score untuk nilai ekstrem.
     """
-    # 1. Hitung Z-score awal (unadjusted)
+    # Hitung Z-score awal (unadjusted)
     if L == 0:
         z_score = np.log(value / M) / S
     else:
         z_score = (np.power(value / M, L) - 1) / (L * S)
     
-    # 2. Penyesuaian WHO untuk nilai ekstrem (> 3 atau < -3)
+    # Penyesuaian WHO untuk nilai ekstrem (> 3 atau < -3)
     if z_score > 3:
-        # Hitung SD3pos
         sd3pos = M * np.power(1 + L * S * 3, 1 / L) if L != 0 else M * np.exp(3 * S)
-        # Hitung SD2pos
         sd2pos = M * np.power(1 + L * S * 2, 1 / L) if L != 0 else M * np.exp(2 * S)
-        # Hitung jarak (SD23pos)
         sd23pos = sd3pos - sd2pos
-        # Modified Z-score
         z_score = 3 + ((value - sd3pos) / sd23pos)
         
     elif z_score < -3:
-        # Hitung SD3neg
         sd3neg = M * np.power(1 + L * S * (-3), 1 / L) if L != 0 else M * np.exp(-3 * S)
-        # Hitung SD2neg
         sd2neg = M * np.power(1 + L * S * (-2), 1 / L) if L != 0 else M * np.exp(-2 * S)
-        # Hitung jarak (SD23neg)
         sd23neg = sd2neg - sd3neg
-        # Modified Z-score
         z_score = -3 + ((value - sd3neg) / sd23neg)
         
     return z_score
@@ -345,46 +334,25 @@ def calculate_zscore_bbu(
 ) -> float:
     """
     Menghitung Z-Score Berat Badan/Usia (BB/U atau WFA - Weight-for-Age).
-    
-    Menggunakan standar WHO 2006/2007 dengan metode LMS.
-    Hasil dibulatkan ke 2 desimal.
-    
-    Args:
-        berat_badan: Berat badan dalam kg
-        usia_bulan: Usia dalam bulan (0-60)
-        jenis_kelamin: "L" untuk laki-laki, "P" untuk perempuan
-    
-    Returns:
-        Z-Score BB/U (dibulatkan ke 2 desimal)
-    
-    Raises:
-        ValueError: Jika usia di luar range 0-60 bulan
     """
-    # Pilih data referensi berdasarkan jenis kelamin
     reference_data = WHO_WFA_BOYS if jenis_kelamin == "L" else WHO_WFA_GIRLS
-    
-    # Dapatkan nilai L, M, S dari tabel WHO
     L, M, S = get_lms_parameters(usia_bulan, reference_data)
-    
-    # Hitung Z-Score (belum dibulatkan)
     z_score = calculate_zscore_lms(berat_badan, L, M, S)
-    
-    # Bulatkan ke 2 desimal
     return round(z_score, 2)
 
 def calculate_zscore_tbu(
     tinggi_badan: float,
     usia_bulan: int,
     jenis_kelamin: Literal["L", "P"],
-    cara_ukur: Literal["terlentang", "berdiri"] = "terlentang" # Tambahkan parameter ini
+    cara_ukur: Literal["terlentang", "berdiri"] = "terlentang" 
 ) -> float:
-
+    """
+    Menghitung Z-Score Tinggi Badan/Usia (TB/U atau HFA - Height-for-Age).
+    """
     # 1. Koreksi ukuran berdasarkan cara ukur dan usia (Standar WHO)
     if usia_bulan < 24 and cara_ukur == "berdiri":
-        # Umur < 24 bln HARUSNYA terlentang. Kalau diukur berdiri, tambah 0.7cm
         tinggi_badan += 0.7 
     elif usia_bulan >= 24 and cara_ukur == "terlentang":
-        # Umur >= 24 bln HARUSNYA berdiri. Kalau diukur terlentang, kurangi 0.7cm
         tinggi_badan -= 0.7
 
     # 2. Pilih tabel berdasarkan jenis kelamin & usia
@@ -407,55 +375,40 @@ def calculate_zscore_tbu(
 
 def determine_nutrition_status(zscore_bbu: float, zscore_tbu: float) -> str:
     """
-    Menentukan status gizi berdasarkan Z-Score BB/U dan TB/U
+    Menentukan status gizi AKTUAL berdasarkan standar WHO.
+    Disinkronkan dengan 4 kategori label pada model KNN.
     
-    Klasifikasi:
-    - Stunting: TB/U < -2 SD
-    - Severely Stunted: TB/U < -3 SD
-    - Wasting: BB/U < -2 SD
-    - Severely Wasted: BB/U < -3 SD
-    - Normal: -2 SD <= Z-Score <= 2 SD
-    - Overweight: Z-Score > 2 SD
-    
-    Args:
-        zscore_bbu: Z-Score Berat Badan/Usia
-        zscore_tbu: Z-Score Tinggi Badan/Usia
-    
-    Returns:
-        Status gizi
+    Mapping:
+    - Normal & Gizi Baik (Code 0)
+    - Normal & Kurang Gizi (Code 1)
+    - Stunting & Gizi Baik (Code 2)
+    - Stunting & Kurang Gizi (Code 3)
     """
-    status_parts = []
     
-    # Klasifikasi berdasarkan TB/U (Stunting)
-    if zscore_tbu < -3:
-        status_parts.append("Severely Stunted")
-    elif zscore_tbu < -2:
-        status_parts.append("Stunting")
-    elif zscore_tbu > 2:
-        status_parts.append("Tinggi")
+    # 1. Tentukan Status Pertumbuhan (TB/U)
+    # Stunting jika Z-Score TB/U < -2.0
+    is_stunted = zscore_tbu < -2.0
     
-    # Klasifikasi berdasarkan BB/U (Wasting/Underweight)
-    if zscore_bbu < -3:
-        status_parts.append("Severely Underweight")
-    elif zscore_bbu < -2:
-        status_parts.append("Underweight")
-    elif zscore_bbu > 2:
-        status_parts.append("Overweight")
+    # 2. Tentukan Status Gizi (BB/U)
+    # Kurang Gizi jika Z-Score BB/U < -2.0
+    is_underweight = zscore_bbu < -2.0
     
-    # Jika tidak ada masalah
-    if not status_parts:
-        return "Normal"
+    # 3. Gabungkan menjadi 4 Kategori Utama
+    if not is_stunted and not is_underweight:
+        return "Normal & Gizi Baik"      # Code 0
     
-    return ", ".join(status_parts)
+    elif not is_stunted and is_underweight:
+        return "Normal & Kurang Gizi"    # Code 1
+    
+    elif is_stunted and not is_underweight:
+        return "Stunting & Gizi Baik"    # Code 2
+    
+    else: # is_stunted and is_underweight
+        return "Stunting & Kurang Gizi"  # Code 3
 
 def is_stunting(zscore_tbu: float) -> bool:
     """
-    Menentukan apakah balita mengalami stunting
-    
-    Args:
-        zscore_tbu: Z-Score Tinggi Badan/Usia
-    
-    Returns:
-        True jika stunting (TB/U < -2 SD), False jika tidak
+    Fungsi pembantu medis untuk mendeteksi stunting secara cepat.
+    Sesuai standar WHO: Z-Score < -2.0 SD.
     """
     return zscore_tbu < -2.0
