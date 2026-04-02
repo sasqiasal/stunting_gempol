@@ -48,47 +48,57 @@ async def register(user_data: UserCreate, supabase_client = Depends(get_supabase
 @router.post("/login", response_model=Token)
 async def login(credentials: UserLogin, supabase_client = Depends(get_supabase)):
     try:
+        print(f"[LOGIN] Attempt for email: {credentials.email}")
+        
         # 1. Cari user
         response = supabase_client.table("users").select("*").eq("email", credentials.email).execute()
+        print(f"[LOGIN] Query returned {len(response.data) if response.data else 0} user(s)")
         
         if not response.data:
+            print(f"[LOGIN] User not found for email: {credentials.email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Email atau password salah"
             )
         
         user = response.data[0]
+        print(f"[LOGIN] User found: {user.get('email')}, role: {user.get('role')}")
         
-        # 2. Validasi kolom password (Mencegah Error 500 jika kolom kosong/NULL)
+        # 2. Validasi kolom password
         db_password = user.get("hashed_password")
         if not db_password:
-            print(f"DEBUG: User {credentials.email} tidak punya hashed_password di DB")
+            print(f"[LOGIN] ERROR: User {credentials.email} tidak punya hashed_password di DB")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Data user tidak lengkap di database (Password NULL)."
             )
         
+        print(f"[LOGIN] Found password hash, verifying...")
+        
         # 3. Verifikasi password
         if not verify_password(credentials.password, db_password):
+            print(f"[LOGIN] Password verification FAILED for {credentials.email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Email atau password salah"
             )
         
+        print(f"[LOGIN] Password verification SUCCESS for {credentials.email}")
+        
         # 4. Cek status aktif
         if not user.get("is_active", True):
+            print(f"[LOGIN] Account not active for {credentials.email}")
             raise HTTPException(status_code=403, detail="Akun tidak aktif")
 
-        # 5. Buat token (Pastikan ID dikonversi ke string jika di JWT butuh string)
+        # 5. Buat token
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         
-        # Tambahkan print debug untuk melihat data sebelum di-encode
-        print(f"DEBUG: Login success for user_id: {user['id']}, role: {user['role']}")
+        print(f"[LOGIN] Creating token for user_id: {user['id']}, role: {user['role']}")
 
         token_payload = {
-            "user_id": str(user["id"]), # Konversi ke string untuk keamanan JWT
+            "user_id": str(user["id"]),
             "email": user["email"],
-            "role": user["role"].lower(), # Paksa huruf kecil sesuai skema DB
+            "role": user["role"].lower(),
             "posyandu_id": user.get("posyandu_id")
         }
 
@@ -96,6 +106,8 @@ async def login(credentials: UserLogin, supabase_client = Depends(get_supabase))
             data=token_payload,
             expires_delta=access_token_expires
         )
+        
+        print(f"[LOGIN] Token created successfully")
         
         user_response = {k: v for k, v in user.items() if k != "hashed_password"}
         
