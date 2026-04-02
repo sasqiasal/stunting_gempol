@@ -105,6 +105,9 @@ async def login(credentials: UserLogin, supabase_client = Depends(get_supabase))
             "user": user_response
         }
 
+    except HTTPException:
+        # Re-raise HTTPException tanpa di-wrap (401, 403, dst)
+        raise
     except Exception as e:
         # Menangkap error tak terduga (seperti pydantic validation error)
         print(f"ERROR SERIUS DI BACKEND: {str(e)}")
