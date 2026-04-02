@@ -1,11 +1,15 @@
 /**
  * Axios Client untuk API Backend
- * Base URL dari environment variable
+ * Base URL dari environment variable atau auto-detect
  */
 
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'; 
+// Smart detection: Jika di production (Vercel), gunakan relative path
+// Jika di development (lokal), gunakan environment variable
+const API_BASE_URL = 
+  import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.PROD ? '/api/v1' : 'http://localhost:8000/api/v1'); 
 
 // Create axios instance
 const apiClient = axios.create({
