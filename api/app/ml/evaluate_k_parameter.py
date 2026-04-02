@@ -16,7 +16,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from app.database import get_supabase
-from app.ml.evaluate_knn_global_4class import ZScoreCalculator
+from app.ml.evaluate_knn_global import ZScoreCalculator
 
 
 class KNNKParameterEvaluator4Class:
