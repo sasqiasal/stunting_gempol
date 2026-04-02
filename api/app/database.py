@@ -1,14 +1,23 @@
 from supabase import create_client, Client
 from app.config import get_settings
 
-_supabase_client: Client = None
+settings = get_settings()
+
+# Supabase Client - GUNAKAN SERVICE_ROLE KEY UNTUK BYPASS RLS
+supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+
+# Supabase Service Client (untuk operasi admin) - sama dengan supabase
+supabase_admin: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
 def get_supabase() -> Client:
-    global _supabase_client
-    if _supabase_client is None:
-        settings = get_settings()
-        _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
-    return _supabase_client
+    """
+    Dependency untuk mendapatkan Supabase client
+    Menggunakan SERVICE_ROLE key untuk bypass RLS
+    """
+    return supabase
 
 def get_supabase_admin() -> Client:
-    return get_supabase()
+    """
+    Dependency untuk mendapatkan Supabase admin client
+    """
+    return supabase_admin

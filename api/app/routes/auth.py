@@ -45,74 +45,65 @@ async def register(user_data: UserCreate, supabase_client = Depends(get_supabase
         )
     
     return response.data[0]
+
 @router.post("/login", response_model=Token)
 async def login(credentials: UserLogin, supabase_client = Depends(get_supabase)):
-    try:
-        # 1. Cari user
-        response = supabase_client.table("users").select("*").eq("email", credentials.email).execute()
-        
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Email atau password salah"
-            )
-        
-        user = response.data[0]
-        
-        # 2. Validasi kolom password (Mencegah Error 500 jika kolom kosong/NULL)
-        db_password = user.get("hashed_password")
-        if not db_password:
-            print(f"DEBUG: User {credentials.email} tidak punya hashed_password di DB")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Data user tidak lengkap di database (Password NULL)."
-            )
-        
-        # 3. Verifikasi password
-        if not verify_password(credentials.password, db_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Email atau password salah"
-            )
-        
-        # 4. Cek status aktif
-        if not user.get("is_active", True):
-            raise HTTPException(status_code=403, detail="Akun tidak aktif")
-
-        # 5. Buat token (Pastikan ID dikonversi ke string jika di JWT butuh string)
-        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        
-        # Tambahkan print debug untuk melihat data sebelum di-encode
-        print(f"DEBUG: Login success for user_id: {user['id']}, role: {user['role']}")
-
-        token_payload = {
-            "user_id": str(user["id"]), # Konversi ke string untuk keamanan JWT
-            "email": user["email"],
-            "role": user["role"].lower(), # Paksa huruf kecil sesuai skema DB
-            "posyandu_id": user.get("posyandu_id")
-        }
-
-        access_token = create_access_token(
-            data=token_payload,
-            expires_delta=access_token_expires
-        )
-        
-        user_response = {k: v for k, v in user.items() if k != "hashed_password"}
-        
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": user_response
-        }
-
-    except Exception as e:
-        # Menangkap error tak terduga (seperti pydantic validation error)
-        print(f"ERROR SERIUS DI BACKEND: {str(e)}")
+    """
+    Login user dan mendapatkan JWT token
+    Menggunakan hashed_password dari database
+    """
+    # Cari user berdasarkan email
+    response = supabase_client.table("users").select("*").eq("email", credentials.email).execute()
+    
+    if not response.data:
         raise HTTPException(
-            status_code=500,
-            detail=f"Terjadi kesalahan internal: {str(e)}"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
         )
-        
+    
+    user = response.data[0]
+    
+    # Verifikasi password dengan hashed_password di database
+    if not user.get("hashed_password"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="User data incomplete. Please contact administrator."
+        )
+    
+    if not verify_password(credentials.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+    
+    # Cek apakah user aktif
+    if not user.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive"
+        )
+    
+    # Buat token
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={
+            "user_id": user["id"],
+            "email": user["email"],
+            "role": user["role"],
+            "posyandu_id": user.get("posyandu_id")  # Include posyandu_id for kader
+        },
+        expires_delta=access_token_expires
+    )
+    
+    # Prepare user response (exclude password, include posyandu_id)
+    user_response = {k: v for k, v in user.items() if k != "hashed_password"}
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user_response
+    }
+
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):
     """

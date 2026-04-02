@@ -135,7 +135,7 @@ class KNNGlobalEvaluator4Class:
     
     def fetch_all_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Fetch semua data dari tabel pengukuran
+        Fetch semua data dari tabel pengukuran untuk training
         
         Returns:
             X_data: Features array
@@ -227,7 +227,14 @@ class KNNGlobalEvaluator4Class:
     
     def evaluate_global(self) -> Dict:
         """
-        Evaluasi KNN dengan 4-class classification
+        Evaluasi KNN dengan 4-class classification menggunakan Train-Test Split
+        
+        Data flow:
+        1. Fetch semua data dari pengukuran table (503 sampel)
+        2. Split: Training 80% (402) + Testing 20% (101)
+        3. Train KNN pada Training set
+        4. Evaluate pada Test set (terpisah)
+        5. Hitung confusion matrix, accuracy, precision, recall, specificity, F1-score
         
         Returns:
             Dictionary dengan hasil evaluasi lengkap
@@ -238,100 +245,161 @@ class KNNGlobalEvaluator4Class:
         
         try:
             # Fetch data
-            print("\n📊 Step 1: Fetch semua data...")
+            print("\n📊 Step 1: Fetch semua data dari pengukuran table...")
             X_data, y_true, record_ids, _ = self.fetch_all_data()
+            print(f"✓ Total sampel: {len(X_data)}")
             
-            # Normalize
-            print("\n🔧 Step 2: Normalize features...")
-            self.scaler.fit(X_data)
-            X_scaled = self.scaler.transform(X_data)
+            # Train-Test Split: 80-20
+            print("\n📊 Step 2: Split data menjadi Training (80%) dan Testing (20%)...")
+            from sklearn.model_selection import train_test_split
             
-            # Train KNN
-            print(f"\n🔧 Step 3: Train KNN (K={self.k})...")
+            # Check if we have enough samples for stratified split
+            total_samples = len(X_data)
+            n_test_samples = max(1, int(total_samples * 0.2))
+            use_stratify = n_test_samples >= 4  # Need at least 4 samples for 4 classes
+            
+            # If test set is too small, use larger split or non-stratified
+            if not use_stratify and n_test_samples < 4:
+                # Adjust test_size to ensure minimum 4 samples, or use non-stratified
+                if total_samples >= 8:
+                    test_size = 0.4  # 40% test to get at least 4 samples
+                else:
+                    # Too few samples total - use minimal split
+                    test_size = 0.3 if total_samples >= 5 else 0.2
+                    use_stratify = False
+            else:
+                test_size = 0.2
+            
+            print(f"Split settings: test_size={test_size}, stratify={use_stratify}, total_samples={total_samples}")
+            
+            X_train, X_test, y_train, y_test, train_indices, test_indices = train_test_split(
+                X_data, y_true, np.arange(len(X_data)),
+                test_size=test_size,  # Dynamic test size
+                random_state=42,  # Untuk reproducibility
+                stratify=y_true if use_stratify else None  # Preserve class distribution if possible
+            )
+            
+            print(f"✓ Training set: {len(X_train)} samples")
+            print(f"  Class distribution:")
+            for cls in range(4):
+                count = np.sum(y_train == cls)
+                pct = (count / len(y_train)) * 100
+                print(f"    Class {cls}: {count} ({pct:.1f}%)")
+            
+            print(f"✓ Testing set: {len(X_test)} samples")
+            print(f"  Class distribution:")
+            for cls in range(4):
+                count = np.sum(y_test == cls)
+                pct = (count / len(y_test)) * 100
+                print(f"    Class {cls}: {count} ({pct:.1f}%)")
+            
+            # Normalize Training data
+            print("\n🔧 Step 3: Normalize features on Training set...")
+            self.scaler.fit(X_train)  # Fit scaler HANYA on training data
+            X_train_scaled = self.scaler.transform(X_train)
+            X_test_scaled = self.scaler.transform(X_test)  # Transform test using training scaler
+            print("✓ Normalization complete")
+            
+            # Train KNN on Training set
+            print(f"\n🔧 Step 4: Train KNN (K={self.k}) on Training set...")
             self.knn_model = KNeighborsClassifier(
                 n_neighbors=self.k,
                 metric='euclidean',
                 weights='distance',
                 algorithm='auto'
             )
-            self.knn_model.fit(X_scaled, y_true)
+            self.knn_model.fit(X_train_scaled, y_train)
+            print(f"✓ Model trained on {len(X_train_scaled)} samples")
             
-            # Predict
-            print("\n🎯 Step 4: Make predictions...")
-            y_pred = self.knn_model.predict(X_scaled)
+            # Make predictions on Test set
+            print("\n🎯 Step 5: Make predictions on Test set...")
+            y_pred = self.knn_model.predict(X_test_scaled)
+            print(f"✓ Predictions made for {len(y_pred)} test samples")
             
-            # Calculate 4x4 confusion matrix
-            print("\n📈 Step 5: Calculate 4x4 confusion matrix...")
-            cm_4x4 = confusion_matrix(y_true, y_pred, labels=[0, 1, 2, 3])
+            # Calculate 4x4 confusion matrix on Test set (untuk referensi)
+            print("\n📈 Step 6: Calculate 4x4 confusion matrix on Test set...")
+            cm_4x4 = confusion_matrix(y_test, y_pred, labels=[0, 1, 2, 3])
+            print(f"✓ Confusion Matrix created")
             
-            # Calculate metrics per class (one-vs-rest)
-            print("\n📊 Step 6: Calculate per-class metrics...")
-            metrics_per_class = {}
+            # Calculate ONE-VS-REST untuk Class 3 (Stunting + Kurang Gizi)
+            # Ini memberikan metrik keseluruhan untuk mendeteksi kasus paling kritis
+            print("\n📊 Step 7: Calculate metrics fokus pada Class 3 (Stunting + Kurang Gizi)...")
             
-            for cls in range(4):
-                # One-vs-rest: create binary problem
-                y_true_binary = (y_true == cls).astype(int)
-                y_pred_binary = (y_pred == cls).astype(int)
-                
-                # Calculate TP, TN, FP, FN
-                tp = np.sum((y_true_binary == 1) & (y_pred_binary == 1))
-                tn = np.sum((y_true_binary == 0) & (y_pred_binary == 0))
-                fp = np.sum((y_true_binary == 0) & (y_pred_binary == 1))
-                fn = np.sum((y_true_binary == 1) & (y_pred_binary == 0))
-                
-                # Calculate metrics
-                precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-                recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-                f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-                
-                metrics_per_class[cls] = {
+            # Convert ke binary: Class 3 (positive) vs Others (negative)
+            y_test_binary = (y_test == 3).astype(int)
+            y_pred_binary = (y_pred == 3).astype(int)
+            
+            # Calculate TP, TN, FP, FN
+            tp = np.sum((y_test_binary == 1) & (y_pred_binary == 1))
+            tn = np.sum((y_test_binary == 0) & (y_pred_binary == 0))
+            fp = np.sum((y_test_binary == 0) & (y_pred_binary == 1))
+            fn = np.sum((y_test_binary == 1) & (y_pred_binary == 0))
+            
+            # Calculate metrics
+            accuracy = (tp + tn) / len(y_test) if len(y_test) > 0 else 0
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+            
+            print(f"✓ Metrics calculated:")
+            print(f"  TP (True Positive): {int(tp)}")
+            print(f"  TN (True Negative): {int(tn)}")
+            print(f"  FP (False Positive): {int(fp)}")
+            print(f"  FN (False Negative): {int(fn)}")
+            
+            result = {
+                "k": self.k,
+                "evaluation_focus": {
+                    "target_class": 3,
+                    "target_class_name": "Stunting + Kurang Gizi",
+                    "description": "One-vs-Rest approach: mengukur performa sistem dalam mendeteksi kasus paling kritis"
+                },
+                "n_training_samples": len(X_train),
+                "n_testing_samples": len(X_test),
+                "n_total_samples": len(X_data),
+                "confusion_matrix_4x4": cm_4x4.tolist(),
+                "class_3_metrics": {
                     "tp": int(tp),
                     "tn": int(tn),
                     "fp": int(fp),
                     "fn": int(fn),
+                    "tp_percent": round(float(tp / len(y_test) * 100), 2) if len(y_test) > 0 else 0,
+                    "tn_percent": round(float(tn / len(y_test) * 100), 2) if len(y_test) > 0 else 0,
+                    "fp_percent": round(float(fp / len(y_test) * 100), 2) if len(y_test) > 0 else 0,
+                    "fn_percent": round(float(fn / len(y_test) * 100), 2) if len(y_test) > 0 else 0,
+                    "class_distribution": {
+                        "actual_class_3": int(np.sum(y_test_binary == 1)),
+                        "actual_other": int(np.sum(y_test_binary == 0)),
+                        "predicted_class_3": int(np.sum(y_pred_binary == 1)),
+                        "predicted_other": int(np.sum(y_pred_binary == 0))
+                    }
+                },
+                "overall_metrics": {
+                    "accuracy": round(accuracy, 4),
+                    "accuracy_percent": round(float(accuracy) * 100, 2),
                     "precision": round(precision, 4),
+                    "precision_percent": round(float(precision) * 100, 2),
                     "recall": round(recall, 4),
+                    "recall_percent": round(float(recall) * 100, 2),
+                    "specificity": round(specificity, 4),
+                    "specificity_percent": round(float(specificity) * 100, 2),
                     "f1_score": round(f1, 4),
-                    "support": int(np.sum(y_true == cls))
-                }
-            
-            # Calculate macro-average metrics
-            precisions = [metrics_per_class[cls]["precision"] for cls in range(4)]
-            recalls = [metrics_per_class[cls]["recall"] for cls in range(4)]
-            f1_scores = [metrics_per_class[cls]["f1_score"] for cls in range(4)]
-            
-            macro_precision = np.mean(precisions)
-            macro_recall = np.mean(recalls)
-            macro_f1 = np.mean(f1_scores)
-            
-            # Overall accuracy
-            accuracy = np.sum(y_true == y_pred) / len(y_true)
-            
-            result = {
-                "k": self.k,
-                "n_total_samples": len(X_data),
-                "n_correct": int(np.sum(y_true == y_pred)),
-                "n_incorrect": int(np.sum(y_true != y_pred)),
-                "accuracy": round(accuracy, 4),
-                "confusion_matrix_4x4": cm_4x4.tolist(),
-                "metrics_per_class": metrics_per_class,
-                "macro_average": {
-                    "precision": round(macro_precision, 4),
-                    "recall": round(macro_recall, 4),
-                    "f1_score": round(macro_f1, 4)
+                    "f1_score_percent": round(float(f1) * 100, 2)
                 },
-                "class_distribution": {
-                    "0": int(np.sum(y_true == 0)),
-                    "1": int(np.sum(y_true == 1)),
-                    "2": int(np.sum(y_true == 2)),
-                    "3": int(np.sum(y_true == 3))
+                "test_class_distribution": {
+                    "0": int(np.sum(y_test == 0)),
+                    "1": int(np.sum(y_test == 1)),
+                    "2": int(np.sum(y_test == 2)),
+                    "3": int(np.sum(y_test == 3))
                 },
-                "prediction_distribution": {
+                "test_prediction_distribution": {
                     "0": int(np.sum(y_pred == 0)),
                     "1": int(np.sum(y_pred == 1)),
                     "2": int(np.sum(y_pred == 2)),
                     "3": int(np.sum(y_pred == 3))
-                }
+                },
+                "evaluation_note": "One-vs-Rest untuk Class 3 (Stunting + Kurang Gizi) pada TEST SET (20% dari total data). Model dilatih pada TRAINING SET (80%). Metrik tunggal ini mengukur performa sistem dalam mendeteksi kasus paling kritis."
             }
             
             return result
@@ -437,6 +505,10 @@ class KNNGlobalEvaluator4Class:
             interpretation += f"  ⚠ Pertimbangkan untuk melakukan tuning atau penambahan data\n"
         
         return interpretation
+
+
+# Alias for backward compatibility with routes
+KNNGlobalEvaluator = KNNGlobalEvaluator4Class
 
 
 def main():

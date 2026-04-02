@@ -36,7 +36,7 @@ const EvaluasiGlobalPage = () => {
   const fetchAvailableMonths = async () => {
     try {
       setLoadingMonths(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
+      const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api/v1' : 'http://localhost:8000/api/v1');
       const response = await fetch(
         `${apiUrl}/evaluasi/available-months`,
         {
@@ -63,7 +63,7 @@ const EvaluasiGlobalPage = () => {
       setLoading(true);
       setError(null);
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
+      const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api/v1' : 'http://localhost:8000/api/v1');
       const bulanParam = bulan ? `?bulan=${bulan}` : '';
       const response = await fetch(
         `${apiUrl}/evaluasi/global${bulanParam}`,
@@ -106,7 +106,7 @@ const EvaluasiGlobalPage = () => {
     const bulan = selectedMonth?.value;
     try {
       setLoadingKComparison(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1';
+      const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api/v1' : 'http://localhost:8000/api/v1');
       const bulanParam = bulan ? `?bulan=${bulan}` : '';
       const response = await fetch(
         `${apiUrl}/evaluasi/global-k-comparison${bulanParam}`,

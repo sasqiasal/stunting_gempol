@@ -1,0 +1,31 @@
+# If you have Docker Compose V2, the command is "docker compose up -d"
+# If you have V1, it is "docker-compose up -d"
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: stunting_backend
+    restart: always
+    expose:
+      - "8000"
+    # Port 8000 tidak di mapping ke localhost host VPS secara default karena API bisa diakses lewat Nginx di port 80/443
+    # Namun jika ingin testing langsung ke backend bypass nginx, ubah port bawah ini, contoh:
+    # ports:
+    #   - "8000:8000"
+    env_file:
+      - .env
+    # Pastikan .env sudah terisi sesuai dengan format .env.example yang baru!
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stunting_frontend_nginx
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

@@ -123,7 +123,8 @@ const DashboardPage = () => {
       if (user?.role === "kader") {
         try {
           const token = localStorage.getItem("access_token");
-          const response = await fetch("http://localhost:8000/api/v1/auth/me", {
+          const apiUrl = import.meta.env.PROD ? '/api/v1' : 'http://localhost:8000/api/v1';
+          const response = await fetch(`${apiUrl}/auth/me`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
